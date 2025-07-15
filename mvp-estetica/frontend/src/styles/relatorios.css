@@ -1,0 +1,325 @@
+/* src/styles/relatorios.css */
+
+.relatorios-page-container {
+    padding: 20px;
+    background-color: #f8f9fa;
+    min-height: calc(100vh - 60px); /* Ajuste conforme o tamanho do seu header/footer */
+    box-sizing: border-box; /* Garante que padding e border sejam incluídos na largura/altura total */
+}
+
+.relatorios-page-container h1 {
+    color: #343a40;
+    margin-bottom: 25px;
+    text-align: center;
+}
+
+.report-navigation {
+    display: flex;
+    flex-wrap: wrap; /* Permite que os botões quebrem para a próxima linha em telas pequenas */
+    justify-content: center;
+    margin-bottom: 30px;
+    background-color: #e9ecef;
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.report-navigation button {
+    background-color: #007bff;
+    color: white;
+    border: none;
+    padding: 10px 15px; /* Reduzi um pouco o padding para telas menores */
+    margin: 5px; /* Aumentei a margem para espaçar melhor os botões */
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.9em; /* Levemente menor para caber mais */
+    transition: background-color 0.3s ease, transform 0.2s ease;
+    flex-grow: 1; /* Permite que os botões cresçam para preencher o espaço */
+    max-width: 150px; /* Limita a largura máxima dos botões */
+    text-align: center;
+}
+
+.report-navigation button:hover {
+    background-color: #0056b3;
+    transform: translateY(-2px);
+}
+
+.report-navigation button.active {
+    background-color: #28a745;
+    box-shadow: 0 4px 8px rgba(0, 123, 255, 0.2);
+}
+
+.report-content {
+    background-color: #ffffff;
+    padding: 25px;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    overflow-x: hidden; /* Garante que nada dentro transborde horizontalmente do container */
+}
+
+.filters-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 20px;
+    align-items: center;
+    justify-content: center;
+}
+
+.filters-container label {
+    font-weight: bold;
+    color: #495057;
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    flex-wrap: wrap; /* Permite que o label e input quebrem linha se necessário */
+    justify-content: center;
+}
+
+.filters-container input[type="date"],
+.filters-container input[type="text"],
+.filters-container select {
+    padding: 8px 12px;
+    border: 1px solid #ced4da;
+    border-radius: 4px;
+    font-size: 0.95em;
+    width: 100%; /* Permite que o input ocupe toda a largura disponível */
+    max-width: 200px; /* Limita a largura máxima para não ficar muito grande em telas largas */
+    box-sizing: border-box; /* Inclui padding e border na largura */
+}
+
+.filters-container button {
+    background-color: #17a2b8;
+    color: white;
+    border: none;
+    padding: 10px 15px;
+    border-radius: 5px;
+    cursor: pointer;
+    font-size: 0.95em;
+    transition: background-color 0.3s ease;
+}
+
+.filters-container button:hover {
+    background-color: #138496;
+}
+
+/* Estilo para tabelas de relatório */
+.report-table-container {
+    overflow-x: auto; /* MUITO IMPORTANTE: permite rolagem horizontal para tabelas */
+    margin-top: 20px;
+}
+
+.report-table-container h3 {
+    margin-bottom: 15px;
+    color: #343a40;
+    text-align: center;
+}
+
+.report-table-container table {
+    width: 100%; /* A tabela deve sempre tentar ocupar 100% da largura do contêiner */
+    border-collapse: collapse;
+    margin-top: 15px;
+    min-width: 600px; /* Garante que a tabela tenha uma largura mínima para não ficar espremida demais */
+}
+
+.report-table-container th,
+.report-table-container td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid #dee2e6;
+    white-space: nowrap; /* Evita que o texto da célula quebre linha, forçando a rolagem */
+}
+
+.report-table-container th {
+    background-color: #f2f2f2;
+    font-weight: bold;
+    color: #495057;
+}
+
+.report-table-container tbody tr:nth-child(even) {
+    background-color: #f8f9fa;
+}
+
+.report-table-container tbody tr:hover {
+    background-color: #e2e6ea;
+}
+
+/* Estilos para o resumo financeiro */
+.report-summary-container {
+    padding: 20px;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    background-color: #f0f8ff; /* Um tom suave de azul para destacar */
+    color: #34495e;
+    font-size: 1.1em;
+    line-height: 1.6;
+    text-align: center;
+}
+
+.report-summary-container h3 {
+    color: #2c3e50;
+    margin-bottom: 20px;
+}
+
+.report-summary-container p strong {
+    color: #007bff;
+    font-size: 1.2em;
+}
+
+.error-message {
+    color: #dc3545;
+    background-color: #f8d7da;
+    border: 1px solid #f5c6cb;
+    padding: 10px;
+    border-radius: 5px;
+    margin-top: 20px;
+    text-align: center;
+}
+
+/* --- Dashboard Metrics Specific Styles (from DashboardMetrics.jsx) --- */
+.dashboard-metrics-container {
+    margin-top: 30px;
+    padding: 20px;
+    background-color: #f0f4f8;
+    border-radius: 10px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    text-align: center;
+}
+
+.dashboard-metrics-container h2 {
+    color: #007bff;
+    margin-bottom: 30px;
+    font-size: 2em;
+}
+
+.metrics-grid {
+    display: grid;
+    /* Usar repeat(auto-fit, minmax(largura_minima, 1fr)) é a chave para grid responsivo */
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); /* Reduzido minmax para 200px */
+    gap: 20px;
+    justify-content: center;
+    align-items: stretch;
+}
+
+.metric-card {
+    background-color: #ffffff;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.2s ease-in-out, box-shadow 0.2s ease-in-out;
+}
+
+.metric-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 6px 15px rgba(0, 0, 0, 0.15);
+}
+
+.metric-card h3 {
+    color: #495057;
+    font-size: 1.0em; /* Levemente menor para caber */
+    margin-bottom: 10px;
+    text-align: center;
+}
+
+.metric-card .metric-value {
+    font-size: 2em; /* Levemente menor */
+    font-weight: bold;
+    color: #28a745;
+    margin-top: 5px;
+    word-break: break-word; /* Permite que o texto quebre dentro da palavra se for muito longo */
+}
+
+.metric-card .metric-value .star-icon {
+    color: gold;
+    margin-left: 5px;
+}
+
+/* Media Queries para responsividade mais agressiva em telas muito pequenas */
+@media (max-width: 768px) {
+    .relatorios-page-container {
+        padding: 15px;
+    }
+
+    .report-navigation button {
+        padding: 8px 12px;
+        font-size: 0.85em;
+        margin: 3px;
+    }
+
+    .metrics-grid {
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); /* Mais agressivo para tablets */
+        gap: 15px;
+    }
+
+    .metric-card h3 {
+        font-size: 0.95em;
+    }
+
+    .metric-card .metric-value {
+        font-size: 1.8em;
+    }
+
+    .filters-container {
+        flex-direction: column; /* Coloca os filtros em coluna em telas menores */
+        align-items: stretch; /* Estica os inputs para 100% de largura */
+    }
+
+    .filters-container label {
+        width: 100%;
+        justify-content: space-between; /* Espaça o label e o input */
+    }
+
+    .filters-container input,
+    .filters-container select {
+        width: auto; /* Deixa o width 100% que é definido no default */
+        flex-grow: 1; /* Permite que os inputs cresçam */
+        max-width: none; /* Remove o limite máximo de largura */
+    }
+
+    .filters-container button {
+        width: 100%; /* Botão ocupa toda a largura */
+        margin-top: 10px; /* Adiciona espaço acima do botão */
+    }
+
+    .report-table-container table {
+        min-width: 500px; /* Mantém uma largura mínima razoável para a tabela */
+    }
+}
+
+@media (max-width: 480px) {
+    .relatorios-page-container {
+        padding: 10px;
+    }
+
+    .report-navigation {
+        flex-direction: column; /* Botões de navegação em coluna */
+        align-items: stretch;
+    }
+
+    .report-navigation button {
+        width: 100%;
+        margin: 5px 0; /* Espaçamento vertical */
+        font-size: 0.9em;
+    }
+
+    .metrics-grid {
+        grid-template-columns: 1fr; /* Uma coluna em telas muito pequenas */
+        gap: 10px;
+    }
+
+    .metric-card h3 {
+        font-size: 1em;
+    }
+
+    .metric-card .metric-value {
+        font-size: 2em;
+    }
+
+    .report-table-container table {
+        min-width: 400px; /* Reduz um pouco mais para telas bem pequenas, mas ainda visível */
+    }
+}

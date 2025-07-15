@@ -1,0 +1,153 @@
+-- Tabela de Usuários (Empresas/Administradores)
+CREATE TABLE usuarios (
+    cod_usuario SERIAL PRIMARY KEY,
+    nome_usuario VARCHAR(150) NOT NULL,
+    nome_empresa VARCHAR(150) NOT NULL,
+    cnpj VARCHAR(18) UNIQUE NOT NULL, -- Ex: 'XX.XXX.XXX/XXXX-XX'
+    email VARCHAR(100) UNIQUE NOT NULL,
+    senha_hash VARCHAR(255) NOT NULL,
+    telefone_contato VARCHAR(20), -- Adicionado
+    logo_url VARCHAR(255),       -- Adicionado
+    codigo_ibge VARCHAR(10),
+    cep VARCHAR(9),              -- Ajustado para formato 'XXXXX-XXX'
+    logradouro VARCHAR(150),
+    numero VARCHAR(10),
+    complemento VARCHAR(100),
+    bairro VARCHAR(100),
+    cidade VARCHAR(100),
+    uf VARCHAR(2),
+    ativo BOOLEAN DEFAULT TRUE,
+    role VARCHAR(50) NOT NULL, -- Ex: 'Admin', 'Funcionario', 'Gerente'
+    plano_assinatura_id INTEGER, -- FK para tabela de planos de assinatura
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Clientes
+CREATE TABLE clientes (
+    cod_cliente SERIAL PRIMARY KEY,
+    cpf VARCHAR(14) UNIQUE NOT NULL, -- Ex: 'XXX.XXX.XXX-XX'
+    nome_cliente VARCHAR(150) NOT NULL,
+    data_nascimento DATE,
+    email VARCHAR(100) UNIQUE, -- Pode ser NULL, mas UNIQUE se presente
+    telefone VARCHAR(20) NOT NULL,
+    senha_hash VARCHAR(255), -- Apenas se o cliente terá portal de acesso
+    genero VARCHAR(15),      -- Adicionado
+    observacoes_gerais TEXT, -- Adicionado
+    indicado_por INTEGER REFERENCES clientes(cod_cliente), -- Adicionado, auto-referência
+    codigo_ibge VARCHAR(10),
+    cep VARCHAR(9),
+    logradouro VARCHAR(150),
+    numero VARCHAR(10),
+    complemento VARCHAR(100),
+    bairro VARCHAR(100),
+    cidade VARCHAR(100),
+    uf VARCHAR(2),
+    ativo BOOLEAN DEFAULT TRUE,
+    ultimo_servico DATE, -- Pode ser calculado/atualizado por trigger ou na app
+    total_gasto NUMERIC(10,2) DEFAULT 0.00,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Veículos
+CREATE TABLE veiculos (
+    cod_veiculo SERIAL PRIMARY KEY,
+    cliente_cod INTEGER NOT NULL REFERENCES clientes(cod_cliente),
+    marca VARCHAR(50) NOT NULL,
+    modelo VARCHAR(50) NOT NULL,
+    ano INTEGER,
+    cor VARCHAR(30),
+    placa VARCHAR(8) UNIQUE NOT NULL, -- 'AAA0000' ou 'AAA0A00'
+    chassi VARCHAR(17) UNIQUE,       -- Adicionado
+    renavam VARCHAR(11) UNIQUE,      -- Adicionado
+    quilometragem_atual INTEGER,   -- Adicionado
+    observacoes TEXT,                -- Adicionado
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Serviços
+CREATE TABLE servicos (
+    cod_servico SERIAL PRIMARY KEY,
+    nome_servico VARCHAR(100) NOT NULL,
+    descricao_servico TEXT,
+    duracao_minutos INTEGER NOT NULL CHECK (duracao_minutos > 0),
+    preco NUMERIC(10,2) NOT NULL CHECK (preco >= 0),
+    categoria VARCHAR(50) NOT NULL,
+    ativo BOOLEAN DEFAULT TRUE,
+    custo_material NUMERIC(10,2) DEFAULT 0.00 CHECK (custo_material >= 0),
+    custo_mao_de_obra NUMERIC(10,2) DEFAULT 0.00 CHECK (custo_mao_de_obra >= 0),
+    garantia_dias INTEGER,
+    observacoes_internas TEXT,
+    imagem_url VARCHAR(255),
+    ordem_exibicao INTEGER,
+    requer_aprovacao BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Tabela de Agendamentos
+CREATE TABLE agendamentos (
+    cod_agendamento SERIAL PRIMARY KEY,
+    cliente_cod INTEGER NOT NULL REFERENCES clientes(cod_cliente),
+    servico_cod INTEGER NOT NULL REFERENCES servicos(cod_servico),
+    veiculo_cod INTEGER REFERENCES veiculos(cod_veiculo), -- Ligação com o veículo específico
+    usuario_responsavel_cod INTEGER REFERENCES usuarios(cod_usuario), -- Adicionado: quem executará/agendou
+    data_hora_inicio TIMESTAMP NOT NULL, -- Combinando data e hora para facilitar Big Calendar
+    data_hora_fim TIMESTAMP,             -- Calculado
+    preco_total NUMERIC(10,2) NOT NULL CHECK (preco_total >= 0),
+    status VARCHAR(50) NOT NULL, -- Ex: 'Pendente', 'Confirmado', 'Em Andamento', 'Concluido', 'Cancelado'
+    tipo_agendamento VARCHAR(50),      -- Adicionado
+    forma_pagamento VARCHAR(50),       -- Adicionado
+    observacoes_agendamento TEXT,      -- Adicionado
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para performance
+CREATE INDEX idx_clientes_cpf ON clientes (cpf);
+CREATE INDEX idx_clientes_email ON clientes (email);
+CREATE INDEX idx_veiculos_cliente_cod ON veiculos (cliente_cod);
+CREATE INDEX idx_veiculos_placa ON veiculos (placa);
+CREATE INDEX idx_servicos_categoria ON servicos (categoria);
+CREATE INDEX idx_agendamentos_data_inicio ON agendamentos (data_hora_inicio);
+CREATE INDEX idx_agendamentos_cliente_servico_veiculo ON agendamentos (cliente_cod, servico_cod, veiculo_cod);
+CREATE INDEX idx_agendamentos_status ON agendamentos (status);
+
+CREATE TABLE avaliacoes (
+    cod_avaliacao SERIAL PRIMARY KEY,
+    agendamento_cod INTEGER NOT NULL REFERENCES agendamentos(cod_agendamento),
+    cliente_cod INTEGER NOT NULL REFERENCES clientes(cod_cliente),
+    nota INTEGER NOT NULL CHECK (nota >= 1 AND nota <= 5), -- Nota de 1 a 5
+    comentario TEXT,
+    data_avaliacao TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    publicado BOOLEAN DEFAULT FALSE,
+    resposta_empresa TEXT,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP, -- Para auditoria de criação
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP  -- Para auditoria de atualização
+);
+
+-- Adicionar índice para buscas rápidas
+CREATE INDEX idx_avaliacoes_agendamento_cod ON avaliacoes (agendamento_cod);
+CREATE INDEX idx_avaliacoes_cliente_cod ON avaliacoes (cliente_cod);
+CREATE INDEX idx_avaliacoes_publicado ON avaliacoes (publicado);
+
+CREATE TABLE configuracoes_agenda (
+    cod_configuracao SERIAL PRIMARY KEY,
+    cod_usuario_empresa INTEGER NOT NULL REFERENCES usuarios(cod_usuario), -- FK para o usuário/empresa que criou a regra
+    tipo_regra VARCHAR(50) NOT NULL, -- Ex: 'horario_operacao_padrao', 'horario_almoco', 'feriado_fixo', 'feriado_movel', 'excecao_dia_especifico', 'intervalo_entre_agendamentos'
+    dia_semana INTEGER, -- Para regras semanais (0=Domingo, 1=Segunda, ..., 6=Sábado). NULL para feriados/datas específicas.
+    data_especifica DATE, -- Para feriados ou exceções de dias específicos. NULL para regras recorrentes.
+    hora_inicio TIME, -- Hora de início da regra (ex: 08:00 para abertura, 12:00 para almoço)
+    hora_fim TIME, -- Hora de fim da regra (ex: 18:00 para fechamento, 13:00 para almoço)
+    intervalo_minutos INTEGER, -- Para a regra 'intervalo_entre_agendamentos' (ex: 15 para 15 minutos entre agendamentos)
+    descricao TEXT, -- Breve descrição ou nome do feriado (Ex: 'Natal', 'Reforma Anual', 'Almoço Padrão')
+    ativo BOOLEAN DEFAULT TRUE, -- Indica se a regra está ativa ou desativada
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices úteis para consultas rápidas
+CREATE INDEX idx_config_agenda_empresa_tipo ON configuracoes_agenda (cod_usuario_empresa, tipo_regra);
+CREATE INDEX idx_config_agenda_data_especifica ON configuracoes_agenda (data_especifica);

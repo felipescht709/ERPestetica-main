@@ -1,0 +1,560 @@
+/* frontend/src/App.css */
+
+/* Novas variáveis CSS para o sidebar (adicionadas ou atualizadas em style.css)
+   Você deve ter estas variáveis definidas no :root do seu style.css */
+/*
+:root {
+    --sidebar-width: 250px;
+    --sidebar-icon-width: 80px;
+    --sidebar-bg: #1f2937;
+    --sidebar-text-color: #e0e7ff;
+    --sidebar-hover-bg: #374151;
+    --sidebar-active-bg: var(--primary-color);
+    --sidebar-icon-color: #9ca3af;
+    --sidebar-border-color: #4b5563;
+    --header-height: 60px;
+}
+*/
+
+.app-container {
+    display: flex;
+    min-height: 100vh;
+    background-color: var(--background-color);
+    position: relative;
+    width: 100%; /* Garante que o container ocupe 100% da largura */
+    overflow-x: hidden; /* Importante para evitar scroll horizontal indesejado */
+}
+
+/* Estilos do Sidebar */
+.sidebar {
+    background-color: var(--sidebar-bg);
+    color: var(--sidebar-text-color);
+    display: flex;
+    flex-direction: column;
+    padding: 20px 0;
+    box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    top: 0;
+    height: 100vh; /* Ocupa a altura total da viewport */
+    z-index: 100; /* Garante que fique acima do conteúdo principal em desktop */
+    transition: width 0.3s ease-in-out, transform 0.3s ease-in-out;
+    flex-shrink: 0; /* Impede que o sidebar encolha */
+    position: sticky; /* Padrão desktop: fixo ao rolar */
+
+    /* Por padrão (desktop), o sidebar está visível e expandido */
+    width: var(--sidebar-width);
+    transform: translateX(0); /* Garante que está visível */
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    padding: 0 20px 20px 20px;
+    border-bottom: 1px solid var(--sidebar-border-color);
+    margin-bottom: 20px;
+    transition: justify-content 0.3s ease-in-out, padding 0.3s ease-in-out;
+}
+
+.sidebar-header .logo-icon-placeholder {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    background-color: var(--accent-color);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-right: 10px;
+    flex-shrink: 0;
+    transition: margin-right 0.3s ease-in-out;
+}
+
+.sidebar-header .app-title {
+    font-size: 1.5em;
+    font-weight: bold;
+    color: var(--sidebar-text-color);
+    margin: 0;
+    white-space: nowrap;
+    overflow: hidden; /* Esconde o texto que transborda ao colapsar */
+    transition: width 0.3s ease-in-out, opacity 0.3s ease-in-out;
+}
+
+.sidebar-nav {
+    flex-grow: 1;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+}
+
+.sidebar-nav-item {
+    display: flex;
+    align-items: center;
+    padding: 12px 20px;
+    color: var(--sidebar-text-color);
+    text-decoration: none;
+    font-size: 1em;
+    transition: background-color 0.2s ease, color 0.2s ease, justify-content 0.3s ease-in-out, padding 0.3s ease-in-out;
+    border-radius: 8px;
+    margin: 5px 10px;
+}
+
+.sidebar-nav-item:hover {
+    background-color: var(--sidebar-hover-bg);
+    color: white;
+}
+
+.sidebar-nav-item svg {
+    margin-right: 10px;
+    color: var(--sidebar-icon-color);
+    transition: color 0.2s ease, margin-right 0.3s ease-in-out;
+}
+
+.sidebar-nav-item:hover svg {
+    color: white;
+}
+
+/* Estilo para o item de navegação ativo */
+.sidebar-nav-item.active {
+    background-color: var(--sidebar-active-bg);
+    color: white;
+    font-weight: bold;
+}
+
+.sidebar-nav-item.active svg {
+    color: white;
+}
+
+.sidebar-footer {
+    padding: 20px;
+    border-top: 1px solid var(--sidebar-border-color);
+    text-align: center;
+    transition: padding 0.3s ease-in-out;
+}
+
+.user-info-sidebar {
+    margin-bottom: 15px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    overflow: hidden; /* Esconde o texto do usuário ao colapsar */
+    white-space: nowrap; /* Evita quebra de linha */
+    transition: opacity 0.3s ease-in-out;
+}
+
+.user-info-sidebar .user-name,
+.user-info-sidebar .user-email {
+    display: block;
+    color: var(--sidebar-text-color);
+}
+.user-info-sidebar .user-name { font-weight: bold; margin-bottom: 5px; }
+.user-info-sidebar .user-email { font-size: 0.8em; color: #9ca3af; }
+
+
+.logout-btn {
+    background-color: transparent;
+    color: var(--red-text);
+    border: 1px solid var(--red-text);
+    padding: 8px 15px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9em;
+    transition: background-color 0.2s ease, color 0.2s ease, border-color 0.2s ease, width 0.3s ease-in-out, height 0.3s ease-in-out, padding 0.3s ease-in-out, border-radius 0.3s ease-in-out;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+}
+
+.logout-btn:hover {
+    background-color: var(--red-text);
+    color: white;
+}
+
+.logout-btn svg {
+    margin-right: 8px;
+    transition: margin-right 0.3s ease-in-out;
+}
+.logout-btn span {
+    transition: opacity 0.3s ease-in-out;
+}
+
+
+/* Estado para o sidebar colapsado (apenas ícones) - APENAS EM DESKTOP */
+@media (min-width: 993px) {
+    .sidebar.collapsed {
+        width: var(--sidebar-icon-width);
+        padding: 20px 0;
+    }
+
+    .sidebar.collapsed .sidebar-header {
+        justify-content: center;
+        padding: 0 0 20px 0;
+    }
+    .sidebar.collapsed .sidebar-header .app-title {
+        width: 0;
+        opacity: 0;
+        display: none; /* Garante que não ocupe espaço */
+    }
+    .sidebar.collapsed .sidebar-header .logo-icon-placeholder {
+        margin-right: 0;
+    }
+
+    .sidebar.collapsed .sidebar-nav-item {
+        justify-content: center;
+        margin: 5px auto;
+        padding: 12px 0;
+        width: calc(100% - 20px);
+    }
+    .sidebar.collapsed .sidebar-nav-item span {
+        width: 0;
+        opacity: 0;
+        display: none; /* Garante que não ocupe espaço */
+    }
+    .sidebar.collapsed .sidebar-nav-item svg {
+        margin-right: 0;
+    }
+
+    .sidebar.collapsed .sidebar-footer {
+        padding: 10px 0;
+    }
+    .sidebar.collapsed .user-info-sidebar {
+        height: 0;
+        opacity: 0;
+        margin-bottom: 0;
+    }
+    .sidebar.collapsed .logout-btn {
+        width: 45px;
+        height: 45px;
+        border-radius: 50%;
+        padding: 0;
+        margin: 0 auto;
+    }
+    .sidebar.collapsed .logout-btn span {
+        width: 0;
+        opacity: 0;
+        display: none; /* Garante que não ocupe espaço */
+    }
+    .sidebar.collapsed .logout-btn svg {
+        margin-right: 0;
+    }
+}
+
+
+/* Wrapper para o cabeçalho e o conteúdo principal */
+.main-content-wrapper {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    transition: margin-left 0.3s ease-in-out, width 0.3s ease-in-out;
+
+    /* Padrão desktop: sidebar expandido */
+    margin-left: var(--sidebar-width);
+    width: calc(100% - var(--sidebar-width));
+}
+
+/* Estado para o main-content-wrapper quando o sidebar está colapsado (desktop) */
+@media (min-width: 993px) {
+    .main-content-wrapper.desktop-collapsed {
+        margin-left: var(--sidebar-icon-width); /* Move o conteúdo para o lado do sidebar colapsado */
+        width: calc(100% - var(--sidebar-icon-width)); /* Aumenta a largura do conteúdo */
+    }
+}
+
+/* Botão de Toggle para Mobile (abrir/fechar overlay) */
+.sidebar-toggle.open-sidebar-btn {
+    display: none; /* ESCONDIDO POR PADRÃO EM DESKTOP */
+    position: fixed;
+    top: 15px;
+    left: 15px;
+    z-index: 210; /* Acima de tudo em mobile */
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 45px;
+    height: 45px;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 5px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+.sidebar-toggle.open-sidebar-btn:hover {
+    background-color: var(--primary-dark-color);
+}
+
+/* Botão de Fechar Sidebar (dentro do sidebar, visível apenas em mobile quando aberto) */
+.sidebar-toggle.close-sidebar-btn {
+    display: none; /* ESCONDIDO POR PADRÃO */
+    position: absolute;
+    top: 15px;
+    right: 15px;
+    background-color: transparent;
+    color: white;
+    box-shadow: none;
+    z-index: 220; /* Acima do conteúdo do sidebar */
+}
+
+/* Overlay para fechar o sidebar mobile ao clicar fora */
+.sidebar-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.5); /* Fundo escuro semi-transparente */
+    z-index: 150; /* Entre o sidebar e o conteúdo principal */
+    display: none; /* Escondido por padrão */
+}
+
+
+/* ESTILOS PARA O BOTÃO DE TOGGLE DE DESKTOP (DENTRO DO HEADER) */
+.app-main-header .desktop-toggle-container {
+    /* Por padrão, este container é para desktop. Em mobile será none. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative; /* Para posicionar o botão dentro */
+    margin-right: 15px; /* Espaçamento entre o botão e o conteúdo do header */
+    /* Garante que não apareça em mobile */
+    display: none; /* Escondido por padrão */
+}
+
+.app-main-header .sidebar-toggle-desktop {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: var(--subtle-text-color); /* Cor discreta */
+    padding: 8px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+.app-main-header .sidebar-toggle-desktop:hover {
+    background-color: var(--secondary-color);
+    color: var(--primary-color);
+}
+
+
+/* Posição e comportamento do sidebar e do botão de toggle em Mobile/Tablet */
+@media (max-width: 992px) {
+    .sidebar {
+        position: fixed;
+        left: 0;
+        transform: translateX(-100%);
+        width: var(--sidebar-width);
+        height: 100vh;
+        z-index: 200;
+        box-shadow: 2px 0 8px rgba(0, 0, 0, 0.2);
+    }
+
+    .sidebar.open {
+        transform: translateX(0);
+    }
+
+    /* O estado .collapsed não se aplica em mobile, então reseta as propriedades de colapsado */
+    .sidebar.collapsed {
+        width: var(--sidebar-width);
+        padding: 20px 0;
+        transform: translateX(-100%);
+    }
+    .sidebar.collapsed .sidebar-header .app-title,
+    .sidebar.collapsed .sidebar-nav-item span,
+    .sidebar.collapsed .user-info-sidebar,
+    .sidebar.collapsed .logout-btn span {
+        display: block;
+        width: auto;
+        opacity: 1;
+    }
+    .sidebar.collapsed .sidebar-header .logo-icon-placeholder,
+    .sidebar.collapsed .sidebar-nav-item svg,
+    .sidebar.collapsed .logout-btn svg {
+        margin-right: 10px;
+    }
+    .sidebar.collapsed .sidebar-header {
+        justify-content: flex-start;
+        padding: 0 20px 20px 20px;
+    }
+    .sidebar.collapsed .sidebar-nav-item {
+        justify-content: flex-start;
+    }
+    .sidebar.collapsed .logout-btn {
+        width: 100%;
+        border-radius: 6px;
+        padding: 8px 15px;
+    }
+    .sidebar.collapsed .user-info-sidebar {
+        height: auto;
+        margin-bottom: 15px;
+    }
+
+
+    /* O conteúdo principal sempre ocupa 100% em mobile, sem margin-left */
+    .main-content-wrapper {
+        width: 100%;
+        margin-left: 0;
+    }
+
+    /* MOSTRAR o botão de toggle para mobile */
+    .sidebar-toggle.open-sidebar-btn {
+        display: flex; /* MOSTRAR */
+        top: 15px;
+        left: 15px;
+    }
+    /* MOSTRAR o botão de fechar dentro do sidebar (o 'X') */
+    .sidebar-toggle.close-sidebar-btn {
+        display: flex; /* MOSTRAR */
+    }
+
+    /* ESCONDER o botão de toggle de desktop em mobile */
+    .app-main-header .desktop-toggle-container {
+        display: none;
+    }
+
+    /* O overlay aparece em mobile quando o sidebar está aberto */
+    .sidebar-overlay {
+        display: block;
+    }
+
+    /* Ajustes para o header principal em mobile */
+    .app-main-header {
+        padding: 10px 15px;
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 10px;
+    }
+
+    .header-user-info {
+        width: 100%;
+        justify-content: space-between;
+    }
+    .header-user-info .user-details {
+        text-align: left;
+    }
+    .header-logout-btn {
+        padding: 8px;
+    }
+}
+
+/* Ajustes finos para mobile muito pequeno */
+@media (max-width: 576px) {
+    .sidebar {
+        width: 100%;
+        border-radius: 0;
+    }
+
+    .sidebar-toggle.open-sidebar-btn {
+        top: 10px;
+        left: 10px;
+        width: 40px;
+        height: 40px;
+    }
+
+    .sidebar-toggle.close-sidebar-btn {
+        top: 10px;
+        right: 10px;
+        width: 40px;
+        height: 40px;
+    }
+    .main-content-pages {
+        padding: 10px;
+    }
+
+    .app-main-header {
+        padding: 10px;
+    }
+}
+:root {
+  --sidebar-width: 240px;
+  --sidebar-icon-width: 70px;
+  --sidebar-bg: #19223a;
+  --sidebar-text: #fff;
+  --sidebar-active: #2d3a5a;
+  --main-bg: #f5f7fa;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background: var(--main-bg);
+  font-family: 'Inter', Arial, Helvetica, sans-serif;
+}
+
+.sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: var(--sidebar-width);
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  transition: width 0.3s;
+  z-index: 100;
+  display: flex;
+  flex-direction: column;
+}
+
+.sidebar.collapsed {
+  width: var(--sidebar-icon-width);
+}
+
+.main-content-wrapper {
+  margin-left: var(--sidebar-width);
+  width: calc(100% - var(--sidebar-width));
+  min-height: 100vh;
+  transition: margin-left 0.3s, width 0.3s;
+  background: var(--main-bg);
+  padding: 24px; /* Adicionado espaçamento interno */
+}
+
+@media (min-width: 993px) {
+  .main-content-wrapper.desktop-collapsed {
+    margin-left: var(--sidebar-icon-width);
+    width: calc(100% - var(--sidebar-icon-width));
+  }
+}
+
+@media (max-width: 992px) {
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 0;
+    width: var(--sidebar-width);
+    z-index: 200;
+    height: 100vh;
+    transition: transform 0.3s;
+    transform: translateX(-100%);
+  }
+  .sidebar.open {
+    transform: translateX(0);
+  }
+  .main-content-wrapper,
+  .main-content-wrapper.mobile-shifted,
+  .main-content-wrapper.desktop-collapsed {
+    margin-left: 0 !important;
+    width: 100% !important;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::-webkit-scrollbar {
+  width: 8px;
+  background: #e3e6ee;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c2c8d6;
+  border-radius: 4px;
+}
