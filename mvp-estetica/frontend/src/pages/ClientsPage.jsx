@@ -4,8 +4,7 @@ import api from '../utils/api'; // Supondo que api.jsx está em ../utils/api
 // Importar ícones do Lucide React
 import { Plus, Search, Edit, Trash2 } from 'lucide-react';
 import ClientVehicles from '../components/ClientVehicles';
-import VehicleForm from '../components/VehicleForm';
-
+import VehicleForm from '../components/VehicleForm'; // Importar o VehicleForm
 
 const ClientsPage = () => {
     const [clients, setClients] = useState([]);
@@ -34,12 +33,16 @@ const ClientsPage = () => {
     const [searchTerm, setSearchTerm] = useState(''); // Novo estado para o termo de busca
     const [showVehiclesModal, setShowVehiclesModal] = useState(false);
     const [selectedClientForVehicles, setSelectedClientForVehicles] = useState(null);
-    const [showVehicleForm, setShowVehicleForm] = useState(false);
-    const [vehicles, setVehicles] = useState([]);
-    const [selectedVehicle, setSelectedVehicle] = useState('');
+
+    // Estados para o modal de cadastro de veículo no cliente
+    const [showVehicleFormModal, setShowVehicleFormModal] = useState(false);
+    const [availableVehicles, setAvailableVehicles] = useState([]);
+    const [selectedVehicleToLink, setSelectedVehicleToLink] = useState('');
+
 
     useEffect(() => {
         fetchClients();
+        fetchAvailableVehicles(); // Buscar veículos para a lista de seleção
     }, []);
 
     const fetchClients = async () => {
@@ -52,14 +55,16 @@ const ClientsPage = () => {
         }
     };
 
-    const fetchVehicles = async () => {
+    const fetchAvailableVehicles = async () => {
         try {
             const res = await api('/veiculos', { method: 'GET' });
-            setVehicles(res);
+            setAvailableVehicles(res);
         } catch (err) {
-            setVehicles([]);
+            console.error('Erro ao buscar veículos disponíveis:', err);
+            setAvailableVehicles([]); // Em caso de erro, limpa a lista
         }
     };
+
 
     const handleInputChange = (e) => {
         const { name, value } = e.target;
@@ -128,7 +133,7 @@ const ClientsPage = () => {
     };
 
     const validateForm = () => {
-        const { cpf, nome_cliente, telefone, email } = currentClient;
+        const { cpf, nome_cliente, telefone } = currentClient;
         if (!cpf || !nome_cliente || !telefone) {
             setError('CPF, Nome do Cliente e Telefone são campos obrigatórios.');
             return false;
@@ -144,7 +149,7 @@ const ClientsPage = () => {
             return false;
         }
         // Basic email format check
-        if (email && !/\S+@\S+\.\S+/.test(email)) {
+        if (currentClient.email && !/\S+@\S+\.\S+/.test(currentClient.email)) {
             setError('Formato de e-mail inválido.');
             return false;
         }
@@ -163,42 +168,51 @@ const ClientsPage = () => {
         clientToSave.cep = clientToSave.cep.replace(/\D/g, '');
 
         // Handle empty strings for optional fields that might be NULL in DB
-        if (clientToSave.data_nascimento === '') clientToSave.data_nascimento = null;
-        if (clientToSave.email === '') clientToSave.email = null;
-        if (clientToSave.genero === '') clientToSave.genero = null;
-        if (clientToSave.observacoes_gerais === '') clientToSave.observacoes_gerais = null;
-        if (clientToSave.indicado_por === '') clientToSave.indicado_por = null;
-        if (clientToSave.codigo_ibge === '') clientToSave.codigo_ibge = null;
-        if (clientToSave.cep === '') clientToSave.cep = null;
-        if (clientToSave.logradouro === '') clientToSave.logradouro = null;
-        if (clientToSave.numero === '') clientToSave.numero = null;
-        if (clientToSave.complemento === '') clientToSave.complemento = null;
-        if (clientToSave.bairro === '') clientToSave.bairro = null;
-        if (clientToSave.cidade === '') clientToSave.cidade = null;
-        if (clientToSave.uf === '') clientToSave.uf = null;
+        // Certifique-se de que campos opcionais vazios sejam enviados como null, não como string vazia
+        Object.keys(clientToSave).forEach(key => {
+            if (clientToSave[key] === '') {
+                clientToSave[key] = null;
+            }
+        });
 
-          try {
+
+        try {
             let savedClient;
             if (isEditing) {
-            await api(`/clientes/${currentClient.cod_cliente}`, { method: 'PUT', body: JSON.stringify(clientToSave),});
-            setMessage('Cliente atualizado com sucesso!');
-            savedClient = { ...currentClient };
+                await api(`/clientes/${currentClient.cod_cliente}`, {
+                    method: 'PUT',
+                    body: JSON.stringify(clientToSave),
+                });
+                setMessage('Cliente atualizado com sucesso!');
+                savedClient = { ...currentClient }; // Usar o cliente atualizado para a vinculação
             } else {
-            const res = await api('/clientes', {method: 'POST',body: JSON.stringify(clientToSave),});
-            setMessage('Cliente adicionado com sucesso!');
-            savedClient = res;
+                const res = await api('/clientes', {
+                    method: 'POST',
+                    body: JSON.stringify(clientToSave),
+                });
+                setMessage('Cliente adicionado com sucesso!');
+                savedClient = res;
             }
-            // Vincula veículo ao cliente se selecionado e não for edição
-            if (selectedVehicle && savedClient.cod_cliente) {
-                await api.post('/veiculos_clientes', { cod_veiculo: selectedVehicle, cod_cliente: savedClient.cod_cliente });
+
+            // Vincula veículo ao cliente se selecionado
+            if (selectedVehicleToLink && savedClient.cod_cliente) {
+                await api('/veiculos_clientes', { // Correção: o 'api' não é um objeto com método 'post', é uma função
+                    method: 'POST',
+                    body: JSON.stringify({
+                        cod_veiculo: selectedVehicleToLink,
+                        cod_cliente: savedClient.cod_cliente
+                    }),
+                });
+                setMessage(prev => prev + ` Veículo vinculado com sucesso!`);
             }
+
             fetchClients();
             closeModal();
-            } catch (err) {
-                console.error('Erro ao salvar cliente:', err);
-                setError('Erro ao salvar cliente. Verifique os dados e tente novamente.');
-            }
-        };
+        } catch (err) {
+            console.error('Erro ao salvar cliente:', err);
+            setError(err.message || 'Erro ao salvar cliente. Verifique os dados e tente novamente.');
+        }
+    };
 
     const handleAddClick = () => {
         setIsEditing(false);
@@ -220,6 +234,7 @@ const ClientsPage = () => {
             cidade: '',
             uf: '',
         });
+        setSelectedVehicleToLink(''); // Limpa a seleção do veículo ao adicionar novo cliente
         setMessage('');
         setError('');
         setShowModal(true);
@@ -227,34 +242,32 @@ const ClientsPage = () => {
 
     const handleEditClick = (client) => {
         setIsEditing(true);
-        // Format dates and phone/cpf for display in the form
         const formattedClient = { ...client };
         if (formattedClient.data_nascimento) {
             const date = new Date(formattedClient.data_nascimento);
             formattedClient.data_nascimento = date.toISOString().split('T')[0]; // Adjust for YYYY-MM-DD
         }
-        // Re-apply masks if necessary, or just keep raw as input fields will format.
-        // For simplicity, we'll let the input change handlers re-format on interaction.
-        // Or you could pre-format here:
+
         formattedClient.cpf = client.cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4');
         formattedClient.telefone = client.telefone.replace(/^(\d\d)(\d{5})(\d{4})$/, '($1) $2-$3');
-        formattedClient.cep = client.cep.replace(/^(\d{5})(\d{3})$/, '$1-$2');
+        formattedClient.cep = client.cep ? client.cep.replace(/^(\d{5})(\d{3})$/, '$1-$2') : ''; // Handle null cep
 
         setCurrentClient(formattedClient);
+        setSelectedVehicleToLink(''); // Limpa a seleção do veículo ao editar cliente
         setMessage('');
         setError('');
         setShowModal(true);
     };
 
     const handleDeleteClick = async (cod_cliente) => {
-        if (window.confirm('Tem certeza que deseja excluir este cliente?')) {
+        if (window.confirm('Tem certeza que deseja desativar este cliente? Clientes desativados não aparecerão nas buscas ativas, mas seu histórico será mantido.')) {
             try {
                 await api(`/clientes/${cod_cliente}`, { method: 'DELETE' });
-                setMessage('Cliente excluído com sucesso!');
+                setMessage('Cliente desativado com sucesso!');
                 fetchClients();
             } catch (err) {
-                console.error('Erro ao excluir cliente:', err);
-                setError('Erro ao excluir cliente. Tente novamente mais tarde.');
+                console.error('Erro ao desativar cliente:', err);
+                setError('Erro ao desativar cliente. Tente novamente mais tarde.');
             }
         }
     };
@@ -265,17 +278,24 @@ const ClientsPage = () => {
         setError('');
     };
 
+    // Callback para quando um veículo é criado no modal aninhado
+    const handleVehicleCreatedInModal = (newVehicle) => {
+        setMessage(`Veículo ${newVehicle.placa} cadastrado com sucesso! Agora você pode vinculá-lo.`);
+        fetchAvailableVehicles(); // Recarregar a lista de veículos disponíveis
+        setSelectedVehicleToLink(newVehicle.cod_veiculo); // Pré-selecionar o veículo recém-criado
+        setShowVehicleFormModal(false); // Fechar o modal de cadastro de veículo
+    };
+
     // Filtra clientes com base no termo de busca
     const filteredClients = clients.filter(client =>
         client.nome_cliente.toLowerCase().includes(searchTerm.toLowerCase()) ||
         client.cpf.includes(searchTerm) ||
         client.telefone.includes(searchTerm) ||
-        client.email.toLowerCase().includes(searchTerm.toLowerCase())
+        (client.email && client.email.toLowerCase().includes(searchTerm.toLowerCase()))
     );
 
-
     return (
-        <div className="page-container"> {/* Usando o container geral da página */}
+        <div className="page-container">
             <div className="page-section-header">
                 <h2>Gerenciamento de Clientes</h2>
                 <button className="btn-primary-dark" onClick={handleAddClick}>
@@ -291,14 +311,14 @@ const ClientsPage = () => {
                 <Search size={20} className="search-icon" />
                 <input
                     type="text"
-                    placeholder="Buscar clientes..."
+                    placeholder="Buscar clientes por nome, CPF, telefone ou email..."
                     className="input-field"
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
                 />
             </div>
 
-            <div className="table-responsive section-content"> {/* Adicione section-content para o estilo de card */}
+            <div className="table-responsive section-content">
                 <table className="clients-table">
                     <thead>
                         <tr>
@@ -316,23 +336,27 @@ const ClientsPage = () => {
                         {filteredClients.length > 0 ? (
                             filteredClients.map((client) => (
                                 <tr key={client.cod_cliente}>
-                                    {/* Removido o espaço em branco entre as tags <td> */}
-                                    <td>{client.cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')}</td><td>{client.nome_cliente}</td><td>{client.telefone.replace(/^(\d\d)(\d{5})(\d{4})$/, '($1) $2-$3')}</td><td>{client.email || 'N/A'}</td><td>{client.ultimo_servico ? new Date(client.ultimo_servico).toLocaleDateString() : 'N/A'}</td><td>R$ {Number(client.total_gasto || 0).toFixed(2).replace('.', ',')}</td>
+                                    <td>{client.cpf.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, '$1.$2.$3-$4')}</td>
+                                    <td>{client.nome_cliente}</td>
+                                    <td>{client.telefone.replace(/^(\d\d)(\d{5})(\d{4})$/, '($1) $2-$3')}</td>
+                                    <td>{client.email || 'N/A'}</td>
+                                    <td>{client.ultimo_servico ? new Date(client.ultimo_servico).toLocaleDateString() : 'N/A'}</td>
+                                    <td>R$ {Number(client.total_gasto || 0).toFixed(2).replace('.', ',')}</td>
                                     <td className="actions">
-                                    <button
-                                        onClick={() => handleEditClick(client)}
-                                        className="btn-action" // Removidas as estilos inline
-                                        title="Editar"
-                                    >
-                                        <Edit size={18} />
-                                    </button>
-                                    <button
-                                        onClick={() => handleDeleteClick(client.cod_cliente)}
-                                        className="btn-action btn-delete" // Adicionado btn-delete para estilo específico
-                                        title="Excluir"
-                                    >
-                                        <Trash2 size={18} />
-                                    </button>
+                                        <button
+                                            onClick={() => handleEditClick(client)}
+                                            className="btn-action"
+                                            title="Editar"
+                                        >
+                                            <Edit size={18} />
+                                        </button>
+                                        <button
+                                            onClick={() => handleDeleteClick(client.cod_cliente)}
+                                            className="btn-action btn-delete"
+                                            title="Desativar Cliente"
+                                        >
+                                            <Trash2 size={18} />
+                                        </button>
                                     </td>
                                     <td>
                                         <button onClick={() => { setSelectedClientForVehicles(client.cod_cliente); setShowVehiclesModal(true); }} className="btn-action">Ver Veículos</button>
@@ -341,7 +365,7 @@ const ClientsPage = () => {
                             ))
                         ) : (
                             <tr>
-                                <td colSpan="8" className="empty-state-table">Nenhum cliente encontrado.</td> {/* Nova classe para TD de empty state */}
+                                <td colSpan="8" className="empty-state-table">Nenhum cliente encontrado.</td>
                             </tr>
                         )}
                     </tbody>
@@ -354,7 +378,7 @@ const ClientsPage = () => {
                         <h3>{isEditing ? 'Editar Cliente' : 'Adicionar Novo Cliente'}</h3>
                         {error && <div className="alert error">{error}</div>}
                         <form onSubmit={handleSubmit}>
-                            <div className="form-row"> {/* Agrupar campos lado a lado */}
+                            <div className="form-row">
                                 <div className="form-group half-width">
                                     <label htmlFor="cpf">CPF:</label>
                                     <input
@@ -367,6 +391,7 @@ const ClientsPage = () => {
                                         placeholder="XXX.XXX.XXX-XX"
                                         required
                                         className="input-field"
+                                        disabled={isEditing} // CPF não editável para evitar inconsistências
                                     />
                                 </div>
                                 <div className="form-group half-width">
@@ -532,15 +557,19 @@ const ClientsPage = () => {
                                 />
                             </div>
                             <div className="form-group">
-                                <label>Vincular a um Veículo:</label>
-                                <select value={selectedVehicle} onChange={e => setSelectedVehicle(e.target.value)} className="input-field">
+                                <label>Vincular a um Veículo Existente:</label>
+                                <select
+                                    value={selectedVehicleToLink}
+                                    onChange={e => setSelectedVehicleToLink(Number(e.target.value))}
+                                    className="input-field"
+                                >
                                     <option value="">Selecione um veículo</option>
-                                    {vehicles.map(v => (
+                                    {availableVehicles.map(v => (
                                         <option key={v.cod_veiculo} value={v.cod_veiculo}>{v.marca} {v.modelo} ({v.placa})</option>
                                     ))}
                                 </select>
-                                <button type="button" onClick={() => setShowVehicleForm(true)} className="button-secondary" style={{marginLeft:8}}>
-                                    Cadastrar Veículo
+                                <button type="button" onClick={() => setShowVehicleFormModal(true)} className="button-secondary" style={{marginLeft:8}}>
+                                    Cadastrar Novo Veículo
                                 </button>
                             </div>
                             <div className="form-actions">
@@ -553,11 +582,14 @@ const ClientsPage = () => {
                             </div>
                         </form>
                     </div>
-                    {showVehicleForm && (
+                    {/* Modal para cadastro de veículo dentro do modal de cliente */}
+                    {showVehicleFormModal && (
                         <div className="modal-backdrop" style={{zIndex: 1200}}>
                             <div className="modal-content">
-                                <VehicleForm onVehicleCreated={handleVehicleCreated} />
-                                <button type="button" onClick={() => setShowVehicleForm(false)} className="button-secondary">Fechar</button>
+                                <VehicleForm
+                                    onClose={() => setShowVehicleFormModal(false)}
+                                    onVehicleCreated={handleVehicleCreatedInModal}
+                                />
                             </div>
                         </div>
                     )}
@@ -565,11 +597,14 @@ const ClientsPage = () => {
             )}
 
             {/* Modal de veículos do cliente */}
-            {showVehiclesModal && (
+            {showVehiclesModal && ( 
                 <div className="modal-backdrop">
                     <div className="modal-content">
-                        <h3>Gerenciar Veículos do Cliente</h3>
-                        <ClientVehicles cod_cliente={selectedClientForVehicles} />
+                        <h3>Veículos do Cliente</h3>
+                        <ClientVehicles
+                            cod_cliente={selectedClientForVehicles}
+                            onVehicleRemoved={fetchClients} // Recarrega clientes ao remover posse de um veículo
+                        />
                         <div className="form-actions">
                             <button type="button" onClick={() => setShowVehiclesModal(false)} className="button-secondary">
                                 Fechar

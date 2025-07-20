@@ -1,3 +1,4 @@
+
 const express = require('express');
 const router = express.Router();
 const pool = require('../banco');
@@ -54,7 +55,7 @@ router.post('/', authenticateToken, authorizeRole(['admin', 'gerente']), async (
     }
 });
 
-// Listar proprietários de um veículo
+// Listar proprietários de um veículo (rota existente, mantém-se)
 router.get('/:cod_veiculo', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente']), async (req, res) => {
     try {
         const { cod_veiculo } = req.params;
@@ -64,6 +65,35 @@ router.get('/:cod_veiculo', authenticateToken, authorizeRole(['admin', 'gerente'
              WHERE vc.cod_veiculo = $1 AND vc.cod_usuario_empresa = $2
              ORDER BY vc.data_inicio_posse DESC`,
             [cod_veiculo, req.user.cod_usuario_empresa]
+        );
+        res.json(result.rows);
+    } catch (err) {
+        console.error(err.message);
+        res.status(500).send('Server Error');
+    }
+});
+
+router.get('/by-client/:cod_cliente', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente', 'tecnico']), async (req, res) => {
+    try {
+        const { cod_cliente } = req.params;
+        const result = await pool.query(
+            `SELECT
+                vc.cod_veiculo_cliente,
+                vc.cod_cliente,
+                vc.cod_veiculo,
+                vc.data_inicio_posse,
+                vc.data_fim_posse,
+                vc.is_proprietario_atual,
+                v.marca,
+                v.modelo,
+                v.placa,
+                v.ano,
+                v.cor
+             FROM veiculos_clientes vc
+             JOIN veiculos v ON vc.cod_veiculo = v.cod_veiculo
+             WHERE vc.cod_cliente = $1 AND vc.cod_usuario_empresa = $2
+             ORDER BY vc.is_proprietario_atual DESC, vc.data_inicio_posse DESC`,
+            [cod_cliente, req.user.cod_usuario_empresa]
         );
         res.json(result.rows);
     } catch (err) {

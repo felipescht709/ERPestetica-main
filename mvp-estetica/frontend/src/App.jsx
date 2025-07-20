@@ -12,6 +12,9 @@ import ServicesPage from './pages/ServicesPage';
 import UsersPage from './pages/UsersPage';
 import FinanceiroPage from './pages/FinanceiroPage';
 import RelatoriosPage from './pages/RelatoriosPage';
+import VehiclesPage from './pages/VehiclesPage';
+import EstoquePage from './pages/EstoquePage';
+import OrdemServicoPage from './pages/OrdemServicoPage';
 
 // Importe os arquivos CSS necessários
 import './App.css';
@@ -19,7 +22,8 @@ import './styles/style.css';
 import './styles/auth.css';
 
 // Importar ícones do Lucide React
-import { Home, Calendar, Users, Settings, UserPlus, DollarSign, BarChart2, LogOut, Menu, X, UserCircle, ChevronLeft, ChevronRight } from 'lucide-react'; // Adicionado ChevronLeft e ChevronRight
+import { Home, Calendar, Users, Settings, UserPlus, DollarSign, BarChart2, LogOut, Menu, X, UserCircle, ChevronLeft, ChevronRight, Car, BoxIcon, FileText } from 'lucide-react'; // Adicionado ChevronLeft e ChevronRight
+
 
 
 // Componente do Sidebar
@@ -67,9 +71,25 @@ const Sidebar = ({ user, userRole, logout, isMobileSidebarOpen, isDesktopSidebar
                         <span>Usuários</span>
                     </Link>
                 )}
+
+                <Link to="/veiculos" className={`sidebar-nav-item ${location.pathname === '/veiculos' ? 'active' : ''}`} onClick={toggleSidebar}>
+                    <Car size={20} />
+                    <span>Veículos</span>
+                </Link>
+
+                <Link to="/ordens-servico" className={`sidebar-nav-item ${location.pathname === '/ordens-servico' ? 'active' : ''}`} onClick={toggleSidebar}>
+                    <FileText size={20} />
+                    <span>Ordens de Serviço</span>
+                </Link>
+
+                <Link to="/estoque" className={`sidebar-nav-item ${location.pathname === '/estoque' ? 'active' : ''}`} onClick={toggleSidebar}>
+                    <BoxIcon size={20} />
+                    <span>Estoque</span>
+                </Link>
+
                 <Link to="/financeiro" className={`sidebar-nav-item ${location.pathname === '/financeiro' ? 'active' : ''}`} onClick={toggleSidebar}>
                     <DollarSign size={20} />
-                    <span>Financeiro</span>
+                    <span>Financeiro</span>  
                 </Link>
                 {(userRole === 'admin' || userRole === 'gerente') && (
                     <Link to="/configuracoes" className={`sidebar-nav-item ${location.pathname === '/configuracoes' ? 'active' : ''}`} onClick={toggleSidebar}>
@@ -251,8 +271,24 @@ function App() {
             <Route
                 path="/usuarios"
                 element={
-                    <PrivateRoute requiredRoles={['admin']}>
+                    <PrivateRoute requiredRoles={['admin','gerente']}>
                         <AppLayout><UsersPage /></AppLayout>
+                    </PrivateRoute>
+                }
+            />
+            <Route
+                path="/veiculos"
+                element={
+                    <PrivateRoute requiredRoles={['admin','gerente', 'atendente', 'tecnico']}>
+                        <AppLayout><VehiclesPage /></AppLayout>
+                    </PrivateRoute>
+                }
+            />
+            <Route
+                path="/estoque"
+                element={
+                    <PrivateRoute requiredRoles={['admin','gerente']}>
+                        <AppLayout><EstoquePage /></AppLayout>
                     </PrivateRoute>
                 }
             />
@@ -280,8 +316,15 @@ function App() {
                         <AppLayout><RelatoriosPage/></AppLayout> {/* Renderiza a página centralizada */}
                     </PrivateRoute>
                 }
+            />           
+            <Route
+                path="/ordens-servico" 
+                element={
+                    <PrivateRoute requiredRoles={['admin', 'gerente', 'atendente', 'tecnico']}>
+                        <AppLayout><OrdemServicoPage /></AppLayout>
+                    </PrivateRoute>
+                }
             />
-
             {/* Catch-all para rotas não encontradas */}
             <Route path="*" element={<div className="empty-state"><h2>404 - Página Não Encontrada</h2><p><Link to="/home" className="button-link">Voltar para a Home</Link></p></div>} />
         </Routes>
@@ -289,3 +332,5 @@ function App() {
 }
 
 export default App;
+
+

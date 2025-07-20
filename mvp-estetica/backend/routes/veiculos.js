@@ -1,3 +1,4 @@
+// Código atualizado para felipescht709/erpestetica/ERPestetica-06b7c746df12133269d64d3c5d88435c14e938cd/mvp-estetica/backend/routes/veiculos.js
 const express = require('express');
 const router = express.Router();
 const pool = require('../banco');
@@ -37,14 +38,15 @@ router.get('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atende
 
 // POST a new vehicle (multi-tenant)
 router.post('/', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
-    const { marca, modelo, cor, placa, ano_fabricacao, observacoes } = req.body;
+    // Ajuste aqui para incluir todos os campos enviados pelo frontend e que estão no DB
+    const { marca, modelo, ano, cor, placa, chassi, renavam, quilometragem_atual, observacoes } = req.body;
     const { cod_usuario_empresa } = req.user;
     try {
         if (!marca || !modelo || !placa) {
             return res.status(400).json({ msg: 'Marca, modelo e placa são obrigatórios.' });
         }
 
-        // FIX: Verificar se a placa já existe para esta empresa
+        // Verificar se a placa já existe para esta empresa
         const plateExists = await pool.query(
             'SELECT cod_veiculo FROM veiculos WHERE placa = $1 AND cod_usuario_empresa = $2',
             [placa, cod_usuario_empresa]
@@ -54,10 +56,11 @@ router.post('/', authenticateToken, authorizeRole(['admin', 'gerente']), async (
             return res.status(400).json({ msg: 'Já existe um veículo com esta placa na sua empresa.' });
         }
 
+        // Ajuste a query INSERT para incluir todos os campos, correspondendo ao schema do DB
         const result = await pool.query(
-            `INSERT INTO veiculos (marca, modelo, cor, placa, ano_fabricacao, observacoes, cod_usuario_empresa)
-             VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-            [marca, modelo, cor, placa, ano_fabricacao, observacoes, cod_usuario_empresa]
+            `INSERT INTO veiculos (marca, modelo, ano, cor, placa, chassi, renavam, quilometragem_atual, observacoes, cod_usuario_empresa)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *`,
+            [marca, modelo, ano, cor, placa, chassi, renavam, quilometragem_atual, observacoes, cod_usuario_empresa]
         );
         res.status(201).json(result.rows[0]);
     } catch (err) {
@@ -70,10 +73,11 @@ router.post('/', authenticateToken, authorizeRole(['admin', 'gerente']), async (
 router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
     const { id } = req.params;
     const { cod_usuario_empresa } = req.user;
-    const { marca, modelo, cor, placa, ano_fabricacao, observacoes } = req.body;
+    // Ajuste aqui para incluir todos os campos que podem ser atualizados
+    const { marca, modelo, ano, cor, placa, chassi, renavam, quilometragem_atual, observacoes } = req.body;
 
     try {
-        // FIX: Verificar se a placa já existe em outro veículo desta empresa
+        // Verificar se a placa já existe em outro veículo desta empresa
         if (placa) {
             const plateExists = await pool.query(
                 'SELECT cod_veiculo FROM veiculos WHERE placa = $1 AND cod_usuario_empresa = $2 AND cod_veiculo != $3',
@@ -87,12 +91,17 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async
     let query = 'UPDATE veiculos SET ';
     const params = [];
     let i = 1;
+    // Adicione todos os campos aqui para atualização
     if (marca !== undefined) { query += `marca = $${i++}, `; params.push(marca); }
     if (modelo !== undefined) { query += `modelo = $${i++}, `; params.push(modelo); }
+    if (ano !== undefined) { query += `ano = $${i++}, `; params.push(ano); } // Corrigido de ano_fabricacao para ano
     if (cor !== undefined) { query += `cor = $${i++}, `; params.push(cor); }
     if (placa !== undefined) { query += `placa = $${i++}, `; params.push(placa); }
-    if (ano_fabricacao !== undefined) { query += `ano_fabricacao = $${i++}, `; params.push(ano_fabricacao); }
+    if (chassi !== undefined) { query += `chassi = $${i++}, `; params.push(chassi); }
+    if (renavam !== undefined) { query += `renavam = $${i++}, `; params.push(renavam); }
+    if (quilometragem_atual !== undefined) { query += `quilometragem_atual = $${i++}, `; params.push(quilometragem_atual); }
     if (observacoes !== undefined) { query += `observacoes = $${i++}, `; params.push(observacoes); }
+
     query += `updated_at = CURRENT_TIMESTAMP `;
     query = query.replace(/,\s*$/, "");
     if (params.length === 0) {

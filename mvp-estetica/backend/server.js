@@ -15,6 +15,11 @@ const userRoutes = require('./routes/usuarios');
 const configuracoesAgendaRoutes = require('./routes/configuracoesAgenda'); 
 const financeiroRoutes = require('./routes/financeiro');
 const ordensServicoRoutes = require('./routes/ordens_servico');
+const veiculosRoutes = require('./routes/veiculos'); 
+const veiculosClientesRoutes = require('./routes/veiculos_clientes'); 
+const produtosEstoqueRoutes = require('./routes/produtos_estoque');
+const equipamentosRoutes = require('./routes/equipamentos');
+const itensOrdensServicoRoutes = require('./routes/itens_ordem_servico'); 
 
 // Middlewares
 const corsOptions = {
@@ -35,11 +40,12 @@ app.use('/api/usuarios', userRoutes);
 app.use('/api/agenda/config', configuracoesAgendaRoutes); 
 app.use('/api/financeiro', financeiroRoutes);
 app.use('/api/ordens_servico', ordensServicoRoutes);
-
-// Rota de teste
-app.get('/', (req, res) => {
-    res.send('Backend da GerenciaCAR rodando!'); // Atualizado nome da plataforma
-});
+app.use('/api/veiculos', veiculosRoutes); 
+app.use('/api/veiculos_clientes', veiculosClientesRoutes); 
+app.use('/api/produtos_estoque', produtosEstoqueRoutes);
+app.use('/api/equipamentos', equipamentosRoutes);   
+app.use('/api/ordens_servico', ordensServicoRoutes); 
+app.use('/api/itens_ordem_servico', itensOrdensServicoRoutes); 
 
 // Middleware de tratamento de erros global
 app.use((err, req, res, next) => {
@@ -49,6 +55,4 @@ app.use((err, req, res, next) => {
 
 // Iniciar o servidor
 app.listen(PORT, () => {
-    console.log(`Backend rodando na porta ${PORT}`);
-    console.log(`Acesse a API em http://localhost:${PORT}`);
 });
