@@ -32,11 +32,6 @@ const Sidebar = ({ user, userRole, logout, isMobileSidebarOpen, isDesktopSidebar
 
     return (
         <aside className={`sidebar ${isMobileSidebarOpen ? 'open' : ''} ${isDesktopSidebarCollapsed ? 'collapsed' : ''}`}>
-            {/* Botão para fechar o sidebar em telas pequenas (aparece no overlay) */}
-            <button className="sidebar-toggle close-sidebar-btn" onClick={toggleSidebar}>
-                <X size={24} /> {/* Ícone 'X' para fechar */}
-            </button>
-
             <div className="sidebar-header">
                 <div className="logo-icon-placeholder">
                     {/* Ícone SVG minimalista para a logo */}
@@ -167,9 +162,9 @@ const AppLayout = ({ children }) => {
     return (
         <div className="app-container">
             {/* Botão de toggle para mobile - RENDERIZADO APENAS SE FOR MOBILE VIEW */}
-            {isMobileView && (
+            {isMobileView && !isMobileSidebarOpen && (
                 <button className="sidebar-toggle open-sidebar-btn" onClick={toggleSidebar}>
-                    {isMobileSidebarOpen ? <X size={24} /> : <Menu size={24} />}
+                    <Menu size={24} /> {/* Ele sempre mostra o ícone de Menu */}
                 </button>
             )}
 
@@ -179,7 +174,7 @@ const AppLayout = ({ children }) => {
                 logout={logout}
                 isMobileSidebarOpen={isMobileSidebarOpen}
                 isDesktopSidebarCollapsed={isDesktopSidebarCollapsed}
-                toggleSidebar={toggleSidebar} // Passar para o botão de fechar dentro do sidebar (mobile)
+                toggleSidebar={toggleSidebar} 
             />
             
             {/* Adiciona uma overlay transparente que fecha o sidebar mobile ao clicar fora */}

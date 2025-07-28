@@ -461,4 +461,25 @@ CREATE INDEX idx_itens_os_servico ON public.itens_ordem_servico (cod_servico);
 CREATE INDEX idx_itens_os_produto ON public.itens_ordem_servico (cod_produto);
 CREATE INDEX idx_itens_os_empresa ON public.itens_ordem_servico (cod_usuario_empresa);
 
+CREATE TABLE despesas (
+    cod_despesa SERIAL PRIMARY KEY,
+    descricao VARCHAR(255) NOT NULL,
+    valor NUMERIC(10,2) NOT NULL CHECK (valor >= 0),
+    data_vencimento DATE,
+    data_pagamento DATE,
+    status_pagamento VARCHAR(50) NOT NULL, -- Ex: 'Pendente', 'Pago', 'Atrasado', 'Cancelado'
+    tipo_despesa VARCHAR(100), -- Ex: 'Aluguel', 'Salario', 'Agua', 'Luz', 'Internet', 'Marketing', 'Material de Escritorio', 'Fornecedor'
+    observacoes TEXT,
+    cod_usuario_empresa INTEGER NOT NULL REFERENCES usuarios(cod_usuario), -- Para multi-tenancy
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Índices para performance
+CREATE INDEX idx_despesas_data_vencimento ON despesas (data_vencimento);
+CREATE INDEX idx_despesas_data_pagamento ON despesas (data_pagamento);
+CREATE INDEX idx_despesas_status_pagamento ON despesas (status_pagamento);
+CREATE INDEX idx_despesas_tipo_despesa ON despesas (tipo_despesa);
+CREATE INDEX idx_despesas_empresa ON despesas (cod_usuario_empresa);
+
 -- FIM do arquivo

@@ -5,6 +5,9 @@ import { BrowserRouter as Router } from 'react-router-dom';
 import { AuthProvider } from './context/AuthContext';
 
 import App from './App.jsx';
+import moment from 'moment';
+import 'moment/locale/pt-br'; 
+moment.locale('pt-br'); 
 
 import './styles/auth.css';
 import './styles/style.css';

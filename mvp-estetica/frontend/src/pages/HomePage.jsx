@@ -1,12 +1,10 @@
+// frontend/src/pages/HomePage.jsx
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
-// Importe componentes do react-bootstrap (alguns podem ser removidos se não forem mais usados)
 import { Spinner, Alert, ListGroup } from 'react-bootstrap';
-
-// Importar ícones do Lucide React
 import { Calendar, DollarSign, Users, TrendingUp, BarChart, Clock, CheckCircle } from 'lucide-react';
-
+import moment from 'moment';
 
 const HomePage = () => {
     const [stats, setStats] = useState(null);
@@ -24,11 +22,12 @@ const HomePage = () => {
                 const statsData = await api('/home', { method: 'GET' });
                 setStats(statsData);
 
-                const today = new Date();
-                const startOfDay = new Date(today.setHours(0, 0, 0, 0)).toISOString();
-                const endOfDay = new Date(today.setHours(23, 59, 59, 999)).toISOString();
+                const today = moment();
+                const startOfDay = today.startOf('day').toISOString();
+                const endOfDay = today.endOf('day').toISOString();
 
-                const appointmentsData = await api(`/agendamentos/range?start=${startOfDay}&end=${endOfDay}`, { method: 'GET' });
+                // CORREÇÃO AQUI: Removido o '/range' da URL
+                const appointmentsData = await api(`/agendamentos?start=${startOfDay}&end=${endOfDay}`, { method: 'GET' });
                 setRecentAppointments(appointmentsData);
 
             } catch (err) {
@@ -42,10 +41,9 @@ const HomePage = () => {
         loadDashboardData();
     }, []);
 
-    // Função para determinar a classe de cor do status (mantida para reuso)
     const getStatusColorClass = (status) => {
         switch (status) {
-            case 'agendado': return 'status-confirmado'; // Usar a classe sem bg- ou text-
+            case 'agendado': return 'status-confirmado';
             case 'em_andamento': return 'status-em-andamento';
             case 'concluido': return 'status-concluido';
             case 'cancelado': return 'status-cancelado';
@@ -54,7 +52,6 @@ const HomePage = () => {
         }
     };
 
-    // Função para obter o texto do status (mantida para reuso)
     const getStatusText = (status) => {
         const statusMap = {
             'agendado': 'Agendado',
@@ -87,13 +84,8 @@ const HomePage = () => {
     }
 
     return (
-        <div className="page-container"> {/* Container geral da página */}
-            {/* O cabeçalho principal "Bem-vindo, {user?.nome_usuario}!" agora está no AppHeader */}
-            {/* <h1 className="mb-4">Bem-vindo, {user?.nome_usuario || 'Usuário'}! 👋</h1> */}
-
-            {/* Seção de Cards de Estatísticas */}
+        <div className="page-container">
             <div className="info-cards-grid">
-                {/* Card: Total de Agendamentos Hoje */}
                 <div className="info-card">
                     <div className="flex-between-center mb-3">
                         <div className="info-card-icon bg-blue-100">
@@ -104,7 +96,6 @@ const HomePage = () => {
                     <div className="info-card-value">{stats?.agendamentosHoje || 0}</div>
                 </div>
 
-                {/* Card: Faturamento Mensal */}
                 <div className="info-card">
                     <div className="flex-between-center mb-3">
                         <div className="info-card-icon bg-green-100">
@@ -112,10 +103,9 @@ const HomePage = () => {
                         </div>
                         <span className="info-card-title">Faturamento Mês</span>
                     </div>
-                    <div className="info-card-value">R$ {parseFloat(stats?.faturamentoMes || 0).toFixed(2).replace('.', ',')}</div>
+                    <div className="info-card-value">R$ {parseFloat(stats?.faturamentoMensal || 0).toFixed(2).replace('.', ',')}</div>
                 </div>
 
-                {/* Card: Clientes Cadastrados */}
                 <div className="info-card">
                     <div className="flex-between-center mb-3">
                         <div className="info-card-icon bg-purple-100">
@@ -126,38 +116,34 @@ const HomePage = () => {
                     <div className="info-card-value">{stats?.totalClientes || 0}</div>
                 </div>
 
-                {/* Card: Serviços Concluídos (Mês) */}
-                 <div className="info-card">
+                <div className="info-card">
                     <div className="flex-between-center mb-3">
                         <div className="info-card-icon bg-yellow-100">
-                            <CheckCircle size={24} className="text-yellow-600" /> {/* Ícone de verificação para serviços concluídos */}
+                            <CheckCircle size={24} className="text-yellow-600" />
                         </div>
                         <span className="info-card-title">Serviços Concluídos (Mês)</span>
                     </div>
                     <div className="info-card-value">{stats?.servicosConcluidosMes || 0}</div>
                 </div>
 
-                {/* Card: Média de Avaliações (exemplo adicional) */}
                 <div className="info-card">
                     <div className="flex-between-center mb-3">
-                        <div className="info-card-icon bg-red-status"> {/* Usando red-status para um visual diferente */}
+                        <div className="info-card-icon bg-red-status">
                             <BarChart size={24} className="text-red-text" />
                         </div>
                         <span className="info-card-title">Média de Avaliações</span>
                     </div>
-                    {/* CORREÇÃO AQUI: Garante que stats?.mediaAvaliacoes seja um número antes de toFixed */}
                     <div className="info-card-value">
                         {typeof stats?.mediaAvaliacoes === 'number'
                             ? stats.mediaAvaliacoes.toFixed(1)
                             : 'N/A'}{' '}
-                        <span style={{fontSize: '0.8em', color: '#ffc107'}}>⭐</span>
+                        <span style={{ fontSize: '0.8em', color: '#ffc107' }}>⭐</span>
                     </div>
                 </div>
 
-                {/* Card: Total de Avaliações (exemplo adicional) */}
                 <div className="info-card">
                     <div className="flex-between-center mb-3">
-                        <div className="info-card-icon bg-green-status"> {/* Usando green-status para um visual diferente */}
+                        <div className="info-card-icon bg-green-status">
                             <TrendingUp size={24} className="text-green-text" />
                         </div>
                         <span className="info-card-title">Total de Avaliações</span>
@@ -166,7 +152,6 @@ const HomePage = () => {
                 </div>
             </div>
 
-            {/* Seção de Próximos Agendamentos */}
             <div className="card">
                 <div className="card-header">
                     <h3 className="card-title">Próximos Agendamentos (Hoje)</h3>

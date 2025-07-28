@@ -20,6 +20,7 @@ const veiculosClientesRoutes = require('./routes/veiculos_clientes');
 const produtosEstoqueRoutes = require('./routes/produtos_estoque');
 const equipamentosRoutes = require('./routes/equipamentos');
 const itensOrdensServicoRoutes = require('./routes/itens_ordem_servico'); 
+const despesasRoutes = require('./routes/despesas'); 
 
 // Middlewares
 const corsOptions = {
@@ -46,6 +47,7 @@ app.use('/api/produtos_estoque', produtosEstoqueRoutes);
 app.use('/api/equipamentos', equipamentosRoutes);   
 app.use('/api/ordens_servico', ordensServicoRoutes); 
 app.use('/api/itens_ordem_servico', itensOrdensServicoRoutes); 
+app.use('/api/despesas', despesasRoutes);
 
 // Middleware de tratamento de erros global
 app.use((err, req, res, next) => {

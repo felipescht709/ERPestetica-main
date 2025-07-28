@@ -1,28 +1,73 @@
 /* frontend/src/App.css */
 
-/* Novas variáveis CSS para o sidebar (adicionadas ou atualizadas em style.css)
-   Você deve ter estas variáveis definidas no :root do seu style.css */
-/*
+/* Remova o primeiro bloco de estilos para .sidebar, .sidebar-nav, .sidebar-footer, etc.
+   Mantenha apenas as variáveis CSS no :root no style.css ou no topo deste arquivo se preferir. */
+
+/* Ajuste o :root para incluir as variáveis que você definiu para o sidebar */
 :root {
-    --sidebar-width: 250px;
-    --sidebar-icon-width: 80px;
-    --sidebar-bg: #1f2937;
-    --sidebar-text-color: #e0e7ff;
-    --sidebar-hover-bg: #374151;
-    --sidebar-active-bg: var(--primary-color);
-    --sidebar-icon-color: #9ca3af;
-    --sidebar-border-color: #4b5563;
-    --header-height: 60px;
+  --primary-color: #2563eb;
+  --primary-dark-color: #1d4ed8;
+  --secondary-color: #e0e7ff;
+  --text-color: #1f2937;
+  --subtle-text-color: #6b7280;
+  --background-color: #f3f4f6;
+  --card-background: #ffffff;
+  --border-color: #e5e7eb;
+  --shadow-color: rgba(0, 0, 0, 0.1);
+  --green-status: #dcfce7;
+  --green-text: #166534;
+  --blue-status: #eff6ff;
+  --blue-text: #1e40af;
+  --yellow-status: #fefce8;
+  --yellow-text: #854d09;
+  --red-status: #fee2e2;
+  --red-text: #991b1b;
+  --purple-100: #f3e8ff;
+  --purple-600: #9333ea;
+  --sidebar-width: 250px; /* Consolidado para 250px como padrão */
+  --sidebar-icon-width: 80px;
+  --sidebar-bg: #1f2937;
+  --sidebar-text-color: #e0e7ff;
+  --sidebar-hover-bg: #374151;
+  --sidebar-active-bg: var(--primary-color);
+  --sidebar-icon-color: #9ca3af;
+  --sidebar-border-color: #4b5563;
+  --header-height: 60px; /* Mantido para referência */
+
+  /* Cores de Status para Cards/Badges e Eventos do Calendário - repetidas para garantir */
+    --green-status: #dcfce7;
+    --green-text: #166534;
+    --blue-status: #eff6ff;
+    --blue-text: #1e40af;
+    --yellow-status: #fefce8;
+    --yellow-text: #854d09;
+    --red-status: #fee2e2;
+    --red-text: #991b1b;
+    --purple-100: #f3e8ff;
+    --purple-600: #9333ea;
 }
-*/
+
+html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    overflow: hidden; /* Importante para evitar scroll duplo do body/html */
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background-color: var(--background-color);
+    color: var(--text-color);
+    line-height: 1.6;
+}
 
 .app-container {
     display: flex;
-    min-height: 100vh;
-    background-color: var(--background-color);
+    min-height: 100vh; /* Garante que o container principal ocupe a altura total da viewport */
     position: relative;
-    width: 100%; /* Garante que o container ocupe 100% da largura */
-    overflow-x: hidden; /* Importante para evitar scroll horizontal indesejado */
+    width: 100%;
+    overflow-x: hidden;
 }
 
 /* Estilos do Sidebar */
@@ -30,19 +75,18 @@
     background-color: var(--sidebar-bg);
     color: var(--sidebar-text-color);
     display: flex;
-    flex-direction: column;
+    flex-direction: column; /* Coloca os itens em coluna */
     padding: 20px 0;
     box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+    position: fixed; /* Fixa o sidebar na tela */
     top: 0;
+    left: 0;
     height: 100vh; /* Ocupa a altura total da viewport */
-    z-index: 100; /* Garante que fique acima do conteúdo principal em desktop */
+    z-index: 100;
     transition: width 0.3s ease-in-out, transform 0.3s ease-in-out;
-    flex-shrink: 0; /* Impede que o sidebar encolha */
-    position: sticky; /* Padrão desktop: fixo ao rolar */
-
-    /* Por padrão (desktop), o sidebar está visível e expandido */
+    flex-shrink: 0;
     width: var(--sidebar-width);
-    transform: translateX(0); /* Garante que está visível */
+    transform: translateX(0);
 }
 
 .sidebar-header {
@@ -52,6 +96,7 @@
     border-bottom: 1px solid var(--sidebar-border-color);
     margin-bottom: 20px;
     transition: justify-content 0.3s ease-in-out, padding 0.3s ease-in-out;
+    flex-shrink: 0; /* Impede que o header encolha */
 }
 
 .sidebar-header .logo-icon-placeholder {
@@ -73,15 +118,17 @@
     color: var(--sidebar-text-color);
     margin: 0;
     white-space: nowrap;
-    overflow: hidden; /* Esconde o texto que transborda ao colapsar */
+    overflow: hidden;
     transition: width 0.3s ease-in-out, opacity 0.3s ease-in-out;
 }
 
 .sidebar-nav {
-    flex-grow: 1;
+    flex-grow: 1; /* Permite que o nav ocupe o espaço restante */
     list-style: none;
     padding: 0;
     margin: 0;
+    overflow-y: auto; /* IMPORTANTE: Adiciona rolagem vertical APENAS no menu de navegação */
+    /* Adicione um scrollbar estilizado se desejar, como no final do seu style.css */
 }
 
 .sidebar-nav-item {
@@ -111,7 +158,6 @@
     color: white;
 }
 
-/* Estilo para o item de navegação ativo */
 .sidebar-nav-item.active {
     background-color: var(--sidebar-active-bg);
     color: white;
@@ -126,7 +172,8 @@
     padding: 20px;
     border-top: 1px solid var(--sidebar-border-color);
     text-align: center;
-    transition: padding 0.3s ease-in-out;
+    flex-shrink: 0; /* Impede que o footer encolha */
+    /* Removido position: sticky daqui, pois o footer está dentro de um flex-column */
 }
 
 .user-info-sidebar {
@@ -134,8 +181,8 @@
     display: flex;
     flex-direction: column;
     align-items: center;
-    overflow: hidden; /* Esconde o texto do usuário ao colapsar */
-    white-space: nowrap; /* Evita quebra de linha */
+    overflow: hidden;
+    white-space: nowrap;
     transition: opacity 0.3s ease-in-out;
 }
 
@@ -191,7 +238,7 @@
     .sidebar.collapsed .sidebar-header .app-title {
         width: 0;
         opacity: 0;
-        display: none; /* Garante que não ocupe espaço */
+        display: none;
     }
     .sidebar.collapsed .sidebar-header .logo-icon-placeholder {
         margin-right: 0;
@@ -206,7 +253,7 @@
     .sidebar.collapsed .sidebar-nav-item span {
         width: 0;
         opacity: 0;
-        display: none; /* Garante que não ocupe espaço */
+        display: none;
     }
     .sidebar.collapsed .sidebar-nav-item svg {
         margin-right: 0;
@@ -230,7 +277,7 @@
     .sidebar.collapsed .logout-btn span {
         width: 0;
         opacity: 0;
-        display: none; /* Garante que não ocupe espaço */
+        display: none;
     }
     .sidebar.collapsed .logout-btn svg {
         margin-right: 0;
@@ -246,26 +293,24 @@
     box-sizing: border-box;
     transition: margin-left 0.3s ease-in-out, width 0.3s ease-in-out;
 
-    /* Padrão desktop: sidebar expandido */
     margin-left: var(--sidebar-width);
     width: calc(100% - var(--sidebar-width));
 }
 
-/* Estado para o main-content-wrapper quando o sidebar está colapsado (desktop) */
 @media (min-width: 993px) {
     .main-content-wrapper.desktop-collapsed {
-        margin-left: var(--sidebar-icon-width); /* Move o conteúdo para o lado do sidebar colapsado */
-        width: calc(100% - var(--sidebar-icon-width)); /* Aumenta a largura do conteúdo */
+        margin-left: var(--sidebar-icon-width);
+        width: calc(100% - var(--sidebar-icon-width));
     }
 }
 
 /* Botão de Toggle para Mobile (abrir/fechar overlay) */
 .sidebar-toggle.open-sidebar-btn {
-    display: none; /* ESCONDIDO POR PADRÃO EM DESKTOP */
+    display: none;
     position: fixed;
     top: 15px;
     left: 15px;
-    z-index: 210; /* Acima de tudo em mobile */
+    z-index: 210;
     background-color: var(--primary-color);
     color: white;
     border: none;
@@ -284,14 +329,14 @@
 
 /* Botão de Fechar Sidebar (dentro do sidebar, visível apenas em mobile quando aberto) */
 .sidebar-toggle.close-sidebar-btn {
-    display: none; /* ESCONDIDO POR PADRÃO */
+    display: none;
     position: absolute;
     top: 15px;
     right: 15px;
     background-color: transparent;
     color: white;
     box-shadow: none;
-    z-index: 220; /* Acima do conteúdo do sidebar */
+    z-index: 220;
 }
 
 /* Overlay para fechar o sidebar mobile ao clicar fora */
@@ -301,29 +346,27 @@
     left: 0;
     width: 100vw;
     height: 100vh;
-    background-color: rgba(0, 0, 0, 0.5); /* Fundo escuro semi-transparente */
-    z-index: 150; /* Entre o sidebar e o conteúdo principal */
-    display: none; /* Escondido por padrão */
+    background-color: rgba(0, 0, 0, 0.5);
+    z-index: 150;
+    display: none;
 }
 
 
 /* ESTILOS PARA O BOTÃO DE TOGGLE DE DESKTOP (DENTRO DO HEADER) */
 .app-main-header .desktop-toggle-container {
-    /* Por padrão, este container é para desktop. Em mobile será none. */
     display: flex;
     align-items: center;
     justify-content: center;
-    position: relative; /* Para posicionar o botão dentro */
-    margin-right: 15px; /* Espaçamento entre o botão e o conteúdo do header */
-    /* Garante que não apareça em mobile */
-    display: none; /* Escondido por padrão */
+    position: relative;
+    margin-right: 15px;
+    display: none;
 }
 
 .app-main-header .sidebar-toggle-desktop {
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--subtle-text-color); /* Cor discreta */
+    color: var(--subtle-text-color);
     padding: 8px;
     border-radius: 50%;
     display: flex;
@@ -354,7 +397,6 @@
         transform: translateX(0);
     }
 
-    /* O estado .collapsed não se aplica em mobile, então reseta as propriedades de colapsado */
     .sidebar.collapsed {
         width: var(--sidebar-width);
         padding: 20px 0;
@@ -391,34 +433,28 @@
     }
 
 
-    /* O conteúdo principal sempre ocupa 100% em mobile, sem margin-left */
     .main-content-wrapper {
         width: 100%;
         margin-left: 0;
     }
 
-    /* MOSTRAR o botão de toggle para mobile */
     .sidebar-toggle.open-sidebar-btn {
-        display: flex; /* MOSTRAR */
+        display: flex;
         top: 15px;
         left: 15px;
     }
-    /* MOSTRAR o botão de fechar dentro do sidebar (o 'X') */
     .sidebar-toggle.close-sidebar-btn {
-        display: flex; /* MOSTRAR */
+        display: flex;
     }
 
-    /* ESCONDER o botão de toggle de desktop em mobile */
     .app-main-header .desktop-toggle-container {
         display: none;
     }
 
-    /* O overlay aparece em mobile quando o sidebar está aberto */
     .sidebar-overlay {
         display: block;
     }
 
-    /* Ajustes para o header principal em mobile */
     .app-main-header {
         padding: 10px 15px;
         flex-direction: column;
@@ -438,7 +474,6 @@
     }
 }
 
-/* Ajustes finos para mobile muito pequeno */
 @media (max-width: 576px) {
     .sidebar {
         width: 100%;
@@ -466,8 +501,11 @@
         padding: 10px;
     }
 }
+
+/* ESTILOS DA SIDEBAR (conflitante, mover ou remover) */
+/* Este bloco é o que está causando o problema, pois está duplicado e mal posicionado */
 :root {
-  --sidebar-width: 240px;
+  --sidebar-width: 240px; /* Possível conflito com 250px acima */
   --sidebar-icon-width: 70px;
   --sidebar-bg: #19223a;
   --sidebar-text: #fff;
@@ -488,14 +526,14 @@ html, body, #root {
   position: fixed;
   top: 0;
   left: 0;
-  height: 100%;
+  height: 100%; /* Isso faz com que o sidebar tenha a altura da viewport */
   width: var(--sidebar-width);
   background: var(--sidebar-bg);
   color: var(--sidebar-text);
   transition: width 0.3s;
   z-index: 100;
   display: flex;
-  flex-direction: column;
+  flex-direction: column; /* Organiza os filhos em coluna */
 }
 
 .sidebar.collapsed {
@@ -508,7 +546,7 @@ html, body, #root {
   min-height: 100vh;
   transition: margin-left 0.3s, width 0.3s;
   background: var(--main-bg);
-  padding: 24px; /* Adicionado espaçamento interno */
+  padding: 24px;
 }
 
 @media (min-width: 993px) {
@@ -540,21 +578,21 @@ html, body, #root {
   }
 }
 
-* {
-  box-sizing: border-box;
-}
-
-a {
-  color: inherit;
-  text-decoration: none;
-}
-
+/* Estilos de Scrollbar customizados */
 ::-webkit-scrollbar {
   width: 8px;
-  background: #e3e6ee;
+  /* Use uma cor semi-transparente que combine com o fundo do sidebar
+     ou simplesmente transparente para o track */
+  background: rgba(31, 41, 55, 0.1); /* Um tom do seu sidebar-bg com baixa opacidade para o track */
 }
 
 ::-webkit-scrollbar-thumb {
-  background: #c2c8d6;
+  /* O "thumb" (o "botão" que você arrasta) pode ter uma opacidade um pouco maior, mas ainda transparente */
+  background: rgba(31, 41, 55, 0.4); /* Um tom do seu sidebar-bg com média opacidade para o thumb */
   border-radius: 4px;
+}
+
+/* Opcional: Estilo para o hover do thumb */
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(31, 41, 55, 0.6); /* Fica um pouco mais visível ao passar o mouse */
 }
