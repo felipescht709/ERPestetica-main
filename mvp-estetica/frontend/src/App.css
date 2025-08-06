@@ -596,3 +596,30 @@ html, body, #root {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(31, 41, 55, 0.6); /* Fica um pouco mais visível ao passar o mouse */
 }
+/* =============================================== */
+/* == ESTILOS PARA O CALENDÁRIO (AGENDA) == */
+/* =============================================== */
+
+/* Estilo para dias com feriados ou bloqueios específicos */
+.rbc-day-bg.rbc-day-bg-blocked {
+    background-color: #ffebee !important; /* Um vermelho bem claro, !important para garantir a sobreposição */
+    cursor: not-allowed;
+}
+
+/* Estilo para dias sem expediente (ex: Domingos ou dias marcados como fechados) */
+.rbc-day-bg.rbc-day-bg-closed {
+    background-color: #f5f5f5 !important; /* Um cinza claro, !important para garantir a sobreposição */
+    cursor: not-allowed;
+}
+
+/* Garante que o slot de tempo na visão de semana/dia também tenha o estilo e cursor de bloqueio */
+.rbc-time-slot.rbc-day-bg-blocked,
+.rbc-time-slot.rbc-day-bg-closed {
+    cursor: not-allowed;
+    background-color: #f5f5f5 !important;
+}
+
+/* Melhora a visibilidade do texto sobre o fundo colorido */
+.rbc-day-bg-blocked .rbc-day-number {
+    font-weight: bold;
+}

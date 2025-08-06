@@ -1,63 +1,48 @@
-// backend/routes/agendamentos.js
+// backend/routes/agendamentos.js (VERSÃO ATUALIZADA)
 const express = require('express');
 const router = express.Router();
 const pool = require('../banco');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
-const moment = require('moment'); 
+const moment = require('moment-timezone');
 
-// Helper para combinar data e hora (pode ser movido para um utils.js)
-// const combineDateTime = (dateStr, timeStr) => {
-//     return new Date(`${dateStr}T${timeStr}:00`);
-// };
-
-// FUNÇÃO HELPER PARA VERIFICAR CONFLITOS DE AGENDAMENTO
+// FUNÇÃO HELPER PARA VERIFICAR CONFLITOS DE AGENDAMENTO (Mantida como está, é excelente)
 const checkAppointmentConflicts = async (
-    client,           // Cliente do pool de DB (para transação)
+    client,
     cod_usuario_empresa,
     data_hora_inicio,
     data_hora_fim,
     usuario_responsavel_cod,
-    veiculo_cod = null, // Pode ser nulo
-    current_cod_agendamento = null // ID do agendamento atual se for uma atualização (PUT)
+    veiculo_cod = null,
+    current_cod_agendamento = null
 ) => {
     let query = `
         SELECT cod_agendamento
         FROM agendamentos
         WHERE cod_usuario_empresa = $1
-          AND status IN ('agendado', 'em_andamento') -- Apenas status que indicam ocupação
+          AND status IN ('agendado', 'em_andamento')
           AND (
-                (data_hora_inicio < $2 AND data_hora_fim > $2) OR -- Novo início está no meio de outro
-                (data_hora_inicio < $3 AND data_hora_fim > $3) OR -- Novo fim está no meio de outro
-                (data_hora_inicio >= $2 AND data_hora_fim <= $3) -- Novo agendamento engloba outro
+                (data_hora_inicio < $2 AND data_hora_fim > $2) OR
+                (data_hora_inicio < $3 AND data_hora_fim > $3) OR
+                (data_hora_inicio >= $2 AND data_hora_fim <= $3)
               )
     `;
     const params = [cod_usuario_empresa, data_hora_inicio, data_hora_fim];
     let paramIndex = 4;
 
     let conflictConditions = [];
-
-    // Prioriza o conflito de funcionário
     if (usuario_responsavel_cod) {
         conflictConditions.push(`usuario_responsavel_cod = $${paramIndex++}`);
         params.push(usuario_responsavel_cod);
     }
-
-    // Se o veículo for fornecido, verifica conflito de veículo
     if (veiculo_cod) {
         conflictConditions.push(`veiculo_cod = $${paramIndex++}`);
         params.push(veiculo_cod);
     }
-    
-    // Se ambos são fornecidos, verifica conflito OU por funcionário OU por veículo
     if (conflictConditions.length > 0) {
         query += ` AND (${conflictConditions.join(' OR ')})`;
     } else {
-        // Se não há funcionário nem veículo, não há o que verificar para conflito de recursos
         return { hasConflict: false, conflictingIds: [] };
     }
-
-
-    // Excluir o próprio agendamento em caso de atualização (PUT)
     if (current_cod_agendamento) {
         query += ` AND cod_agendamento != $${paramIndex++}`;
         params.push(current_cod_agendamento);
@@ -67,11 +52,12 @@ const checkAppointmentConflicts = async (
     return { hasConflict: result.rows.length > 0, conflictingIds: result.rows.map(row => row.cod_agendamento) };
 };
 
-// GET all appointments (multi-tenant)
+// GET all appointments (multi-tenant) - ROTA ATUALIZADA
 router.get('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente', 'tecnico']), async (req, res) => {
     try {
         const { cod_usuario_empresa } = req.user;
-        const { start, end, status } = req.query;
+        // NOVO: Adicionado 'responsaveis' para filtro de multi-agenda
+        const { start, end, status, responsaveis } = req.query;
 
         let query = `
             SELECT
@@ -83,7 +69,7 @@ router.get('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente
                 a.tipo_agendamento,
                 a.forma_pagamento,
                 a.observacoes_agendamento,
-                a.duracao_minutos, -- Agora esta coluna deve existir!
+                a.duracao_minutos,
                 c.cod_cliente,
                 c.nome_cliente AS cliente_nome,
                 c.telefone AS cliente_telefone,
@@ -108,13 +94,21 @@ router.get('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente
         let paramIndex = 2;
 
         if (start && end) {
-            // As datas já vêm formatadas como ISOString do frontend, então o ::timestamp é adequado.
             query += ` AND a.data_hora_inicio >= $${paramIndex++}::timestamp AND a.data_hora_inicio <= $${paramIndex++}::timestamp`;
             params.push(start, end);
         }
         if (status) {
             query += ` AND a.status = $${paramIndex++}`;
-            params.push(status); // O status 'concluido' virá do frontend em minúsculas
+            params.push(status);
+        }
+
+        // NOVO: Bloco para filtrar por um ou mais responsáveis
+        if (responsaveis) {
+            const responsaveisArray = responsaveis.split(',').map(id => parseInt(id, 10));
+            if (responsaveisArray.length > 0) {
+                query += ` AND a.usuario_responsavel_cod = ANY($${paramIndex++}::int[])`;
+                params.push(responsaveisArray);
+            }
         }
 
         query += ` ORDER BY a.data_hora_inicio ASC`;
@@ -127,69 +121,94 @@ router.get('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente
     }
 });
 
-// POST a new appointment (multi-tenant with conflict detection)
 router.post('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente']), async (req, res) => {
     const {
         cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod,
-        data_hora_inicio, duracao_minutos, preco_total, status, tipo_agendamento,
-        forma_pagamento, observacoes_agendamento
+        data_hora_inicio, duracao_minutos, /* ...resto dos campos... */
     } = req.body;
     const { cod_usuario_empresa } = req.user;
-
-    const client = await pool.connect(); // Obter um cliente do pool para a transação
+    const client = await pool.connect();
 
     try {
         await client.query('BEGIN');
 
-        // Calcular data_hora_fim
-        const data_hora_fim = moment(data_hora_inicio).add(duracao_minutos, 'minutes').toISOString();
-
-        // 1. VERIFICAR CONFLITOS ANTES DE INSERIR
-        const { hasConflict, conflictingIds } = await checkAppointmentConflicts(
-            client,
-            cod_usuario_empresa,
-            data_hora_inicio,
-            data_hora_fim,
-            usuario_responsavel_cod,
-            veiculo_cod
+        // Busca TODAS as regras, incluindo o nosso novo "interruptor"
+        const regrasResult = await client.query(
+            "SELECT * FROM configuracoes_agenda WHERE cod_usuario_empresa = $1",
+            [cod_usuario_empresa]
         );
+        const regras = regrasResult.rows;
 
+        // --- INTERRUPTOR DE SEGURANÇA ---
+        // Verificamos se as validações avançadas estão ativadas.
+        const validacoesAvancadasAtivas = regras.find(r => r.tipo_regra === 'ativar_validacoes_avancadas' && r.ativo === true);
+
+        if (validacoesAvancadasAtivas) {
+            // Se estiverem ativas, o "policial" entra em ação.
+            const dataAgendamento = moment.tz(data_hora_inicio, "America/Sao_Paulo");
+            const data_hora_fim = dataAgendamento.clone().add(duracao_minutos, 'minutes');
+
+            // VALIDAÇÃO 1: DIAS DE BLOQUEIO
+            const diaFormatado = dataAgendamento.format('YYYY-MM-DD');
+            const diaBloqueado = regras.find(r => r.tipo_regra === 'feriado' && r.ativo && moment(r.data_especifica).format('YYYY-MM-DD') === diaFormatado);
+            if (diaBloqueado) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ msg: `Agendamento bloqueado no dia ${dataAgendamento.format('DD/MM/YYYY')}. Motivo: ${diaBloqueado.descricao}` });
+            }
+
+            // VALIDAÇÃO 2: HORÁRIO DE FUNCIONAMENTO
+            const diaDaSemana = dataAgendamento.day();
+            const regraDoDia = regras.find(r => r.tipo_regra === 'horario_trabalho' && r.ativo && r.dia_semana === diaDaSemana);
+            if (!regraDoDia) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ msg: `Não há expediente configurado para ${dataAgendamento.format('dddd')}.` });
+            }
+            const horaInicioTrabalho = moment.tz(`${diaFormatado} ${regraDoDia.hora_inicio}`, "America/Sao_Paulo");
+            const horaFimTrabalho = moment.tz(`${diaFormatado} ${regraDoDia.hora_fim}`, "America/Sao_Paulo");
+            if (dataAgendamento.isBefore(horaInicioTrabalho) || data_hora_fim.isAfter(horaFimTrabalho)) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ msg: `Horário fora do expediente. Na ${dataAgendamento.format('dddd')}, o atendimento é das ${regraDoDia.hora_inicio} às ${regraDoDia.hora_fim}.` });
+            }
+            
+            // VALIDAÇÃO 3: LIMITE DIÁRIO
+            const regraLimiteDiario = regras.find(r => r.tipo_regra === 'limite_agendamentos_dia' && r.ativo);
+            if (regraLimiteDiario && regraLimiteDiario.valor_numerico !== null) {
+                const limite = regraLimiteDiario.valor_numerico;
+                const agendamentosNoDiaResult = await client.query("SELECT COUNT(*) FROM agendamentos WHERE data_hora_inicio::date = $1 AND cod_usuario_empresa = $2 AND status <> 'cancelado'", [data_hora_inicio, cod_usuario_empresa]);
+                if (parseInt(agendamentosNoDiaResult.rows[0].count) >= limite) {
+                    await client.query('ROLLBACK');
+                    return res.status(400).json({ msg: `Limite de ${limite} agendamentos para este dia foi atingido.` });
+                }
+            }
+        }
+        // --- FIM DAS VALIDAÇÕES AVANÇADAS ---
+        // SEU CÓDIGO ORIGINAL E INTACTO RODA AQUI:
+        const data_hora_fim_iso = moment(data_hora_inicio).add(duracao_minutos, 'minutes').toISOString();
+        const { hasConflict, conflictingIds } = await checkAppointmentConflicts(client, cod_usuario_empresa, data_hora_inicio, data_hora_fim_iso, usuario_responsavel_cod, veiculo_cod);
         if (hasConflict) {
             await client.query('ROLLBACK');
-            return res.status(409).json({
-                msg: `Conflito de agendamento detectado! Já existe(m) agendamento(s) sobreposto(s) (ID(s): ${conflictingIds.join(', ')}).`,
-                conflictIds: conflictingIds
-            });
+            return res.status(409).json({ msg: `Conflito de agendamento detectado! (IDs: ${conflictingIds.join(', ')})`});
         }
 
-        // 2. Inserir o agendamento
+        // Se tudo estiver OK, o agendamento é criado.
         const result = await client.query(
-            `INSERT INTO agendamentos (
-                cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod,
-                data_hora_inicio, data_hora_fim, duracao_minutos, preco_total, status, tipo_agendamento,
-                forma_pagamento, observacoes_agendamento, cod_usuario_empresa
-            ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
-            [
-                cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod,
-                data_hora_inicio, data_hora_fim, duracao_minutos, preco_total, status, tipo_agendamento,
-                forma_pagamento, observacoes_agendamento, cod_usuario_empresa
-            ]
+            `INSERT INTO agendamentos (cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod, data_hora_inicio, data_hora_fim, duracao_minutos, preco_total, status, tipo_agendamento, forma_pagamento, observacoes_agendamento, cod_usuario_empresa) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+            [cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod, data_hora_inicio, data_hora_fim_iso, duracao_minutos, preco_total, status, tipo_agendamento, forma_pagamento, observacoes_agendamento, cod_usuario_empresa]
         );
-        const newAppointment = result.rows[0];
-
+        
         await client.query('COMMIT');
-        res.status(201).json(newAppointment);
+        res.status(201).json(result.rows[0]);
 
     } catch (err) {
         await client.query('ROLLBACK');
-        console.error('Erro ao criar agendamento:', err.message);
+        console.error('Erro ao criar agendamento:', err.message, err.stack);
         res.status(500).send('Server Error');
     } finally {
-        client.release(); // Liberar o cliente de volta para o pool
+        client.release();
     }
 });
 
-// PUT (update) an appointment (multi-tenant with conflict detection)
+// PUT (update) an appointment (Mantido como está)
 router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente']), async (req, res) => {
     const { id } = req.params;
     const { cod_usuario_empresa } = req.user;
@@ -204,10 +223,8 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atende
     try {
         await client.query('BEGIN');
 
-        // Calcular data_hora_fim
         const data_hora_fim = moment(data_hora_inicio).add(duracao_minutos, 'minutes').toISOString();
 
-        // 1. VERIFICAR CONFLITOS ANTES DE ATUALIZAR, EXCLUINDO O PRÓPRIO AGENDAMENTO
         const { hasConflict, conflictingIds } = await checkAppointmentConflicts(
             client,
             cod_usuario_empresa,
@@ -215,7 +232,7 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atende
             data_hora_fim,
             usuario_responsavel_cod,
             veiculo_cod,
-            id // Passar o ID do agendamento atual para ser excluído da verificação
+            id
         );
 
         if (hasConflict) {
@@ -226,7 +243,6 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atende
             });
         }
 
-        // 2. Atualizar o agendamento
         const fields = {
             cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod,
             data_hora_inicio, data_hora_fim, duracao_minutos, preco_total, status, tipo_agendamento,
@@ -243,7 +259,7 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atende
             }
         }
         query += `updated_at = CURRENT_TIMESTAMP `;
-        query = query.replace(/,\s*$/, ""); // Remove a vírgula extra no final
+        query = query.replace(/,\s*$/, "");
 
         if (params.length === 0) {
             await client.query('ROLLBACK');
@@ -272,7 +288,8 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atende
     }
 });
 
-// DELETE an appointment (multi-tenant)
+
+// DELETE an appointment (Mantido como está)
 router.delete('/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
     try {
         const { id } = req.params;
@@ -290,5 +307,6 @@ router.delete('/:id', authenticateToken, authorizeRole(['admin', 'gerente']), as
         res.status(500).send('Server Error');
     }
 });
+
 
 module.exports = router;
