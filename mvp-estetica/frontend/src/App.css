@@ -51,7 +51,7 @@ html, body, #root {
     height: 100%;
     margin: 0;
     padding: 0;
-    overflow: hidden; /* Importante para evitar scroll duplo do body/html */
+    overflow: hidden; /* Previne scroll na página inteira, o scroll será no main-content */
     box-sizing: border-box;
 }
 
@@ -292,9 +292,10 @@ body {
     flex-direction: column;
     box-sizing: border-box;
     transition: margin-left 0.3s ease-in-out, width 0.3s ease-in-out;
-
     margin-left: var(--sidebar-width);
     width: calc(100% - var(--sidebar-width));
+    height: 100vh;
+    overflow-y: auto;
 }
 
 @media (min-width: 993px) {
@@ -502,82 +503,6 @@ body {
     }
 }
 
-/* ESTILOS DA SIDEBAR (conflitante, mover ou remover) */
-/* Este bloco é o que está causando o problema, pois está duplicado e mal posicionado */
-:root {
-  --sidebar-width: 240px; /* Possível conflito com 250px acima */
-  --sidebar-icon-width: 70px;
-  --sidebar-bg: #19223a;
-  --sidebar-text: #fff;
-  --sidebar-active: #2d3a5a;
-  --main-bg: #f5f7fa;
-}
-
-html, body, #root {
-  height: 100%;
-  margin: 0;
-  padding: 0;
-  overflow-x: hidden;
-  background: var(--main-bg);
-  font-family: 'Inter', Arial, Helvetica, sans-serif;
-}
-
-.sidebar {
-  position: fixed;
-  top: 0;
-  left: 0;
-  height: 100%; /* Isso faz com que o sidebar tenha a altura da viewport */
-  width: var(--sidebar-width);
-  background: var(--sidebar-bg);
-  color: var(--sidebar-text);
-  transition: width 0.3s;
-  z-index: 100;
-  display: flex;
-  flex-direction: column; /* Organiza os filhos em coluna */
-}
-
-.sidebar.collapsed {
-  width: var(--sidebar-icon-width);
-}
-
-.main-content-wrapper {
-  margin-left: var(--sidebar-width);
-  width: calc(100% - var(--sidebar-width));
-  min-height: 100vh;
-  transition: margin-left 0.3s, width 0.3s;
-  background: var(--main-bg);
-  padding: 24px;
-}
-
-@media (min-width: 993px) {
-  .main-content-wrapper.desktop-collapsed {
-    margin-left: var(--sidebar-icon-width);
-    width: calc(100% - var(--sidebar-icon-width));
-  }
-}
-
-@media (max-width: 992px) {
-  .sidebar {
-    position: fixed;
-    left: 0;
-    top: 0;
-    width: var(--sidebar-width);
-    z-index: 200;
-    height: 100vh;
-    transition: transform 0.3s;
-    transform: translateX(-100%);
-  }
-  .sidebar.open {
-    transform: translateX(0);
-  }
-  .main-content-wrapper,
-  .main-content-wrapper.mobile-shifted,
-  .main-content-wrapper.desktop-collapsed {
-    margin-left: 0 !important;
-    width: 100% !important;
-  }
-}
-
 /* Estilos de Scrollbar customizados */
 ::-webkit-scrollbar {
   width: 8px;
@@ -597,29 +522,66 @@ html, body, #root {
   background: rgba(31, 41, 55, 0.6); /* Fica um pouco mais visível ao passar o mouse */
 }
 /* =============================================== */
-/* == ESTILOS PARA O CALENDÁRIO (AGENDA) == */
+/* == ESTILOS PARA O CALENDÁRIO (AGENDA)      == */
 /* =============================================== */
 
 /* Estilo para dias com feriados ou bloqueios específicos */
 .rbc-day-bg.rbc-day-bg-blocked {
-    background-color: #ffebee !important; /* Um vermelho bem claro, !important para garantir a sobreposição */
+    background-color: #ffebee !important; /* Vermelho claro */
     cursor: not-allowed;
 }
 
-/* Estilo para dias sem expediente (ex: Domingos ou dias marcados como fechados) */
+/* Estilo para dias sem expediente (marcados como fechados) */
 .rbc-day-bg.rbc-day-bg-closed {
-    background-color: #f5f5f5 !important; /* Um cinza claro, !important para garantir a sobreposição */
+    background-color: #f5f5f5 !important; /* Cinza claro */
     cursor: not-allowed;
 }
 
-/* Garante que o slot de tempo na visão de semana/dia também tenha o estilo e cursor de bloqueio */
-.rbc-time-slot.rbc-day-bg-blocked,
-.rbc-time-slot.rbc-day-bg-closed {
-    cursor: not-allowed;
-    background-color: #f5f5f5 !important;
+/* Estilo para eventos de bloqueio (almoço, pausas) */
+.rbc-event.rbc-event-blocked {
+    background-image: repeating-linear-gradient(
+        45deg,
+        rgba(0, 0, 0, 0.08),
+        rgba(0, 0, 0, 0.08) 10px,
+        rgba(0, 0, 0, 0.04) 10px,
+        rgba(0, 0, 0, 0.04) 20px
+    ) !important;
+    cursor: not-allowed !important;
+    border: 1px dashed #a0a0a0 !important;
+}
+/* Adicione ao seu arquivo CSS principal */
+.page-header-controls {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap; /* Para responsividade */
 }
 
-/* Melhora a visibilidade do texto sobre o fundo colorido */
-.rbc-day-bg-blocked .rbc-day-number {
-    font-weight: bold;
+.actions-and-filters {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap; /* Permite que os filtros quebrem a linha */
+    justify-content: flex-end; /* Alinha os filtros à direita */
+    gap: 1rem; /* Espaçamento entre os elementos */
+}
+
+.filter-group {
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-group label {
+    font-size: 0.8rem;
+    margin-bottom: 0.25rem;
+    color: #6c757d;
+}
+
+.filter-group select {
+    min-width: 200px;
+    /* Estilos para o select multiple */
+    height: 60px; /* Ajuste a altura conforme necessário */
+    border-radius: 5px;
+    border: 1px solid #ced4da;
+    padding: 0.375rem;
 }

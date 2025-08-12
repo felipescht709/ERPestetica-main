@@ -2,13 +2,12 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
-import { Spinner, Alert, ListGroup } from 'react-bootstrap';
-import { Calendar, DollarSign, Users, TrendingUp, BarChart, Clock, CheckCircle } from 'lucide-react';
-import moment from 'moment';
+import { Spinner } from 'react-bootstrap';
+import { Calendar, DollarSign, Users, TrendingUp, BarChart, CheckCircle } from 'lucide-react';
+import ProximosAgendamentos from '../components/ProximosAgendamentos'; // <-- 1. Importar o novo componente
 
 const HomePage = () => {
     const [stats, setStats] = useState(null);
-    const [recentAppointments, setRecentAppointments] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const { user, userRole } = useContext(AuthContext);
@@ -22,14 +21,6 @@ const HomePage = () => {
                 const statsData = await api('/home', { method: 'GET' });
                 setStats(statsData);
 
-                const today = moment();
-                const startOfDay = today.startOf('day').toISOString();
-                const endOfDay = today.endOf('day').toISOString();
-
-                // CORREÇÃO AQUI: Removido o '/range' da URL
-                const appointmentsData = await api(`/agendamentos?start=${startOfDay}&end=${endOfDay}`, { method: 'GET' });
-                setRecentAppointments(appointmentsData);
-
             } catch (err) {
                 console.error('Erro ao carregar dados do dashboard:', err);
                 setError(err.message || 'Erro ao carregar dados do dashboard.');
@@ -40,28 +31,6 @@ const HomePage = () => {
 
         loadDashboardData();
     }, []);
-
-    const getStatusColorClass = (status) => {
-        switch (status) {
-            case 'agendado': return 'status-confirmado';
-            case 'em_andamento': return 'status-em-andamento';
-            case 'concluido': return 'status-concluido';
-            case 'cancelado': return 'status-cancelado';
-            case 'pendente': return 'status-pendente';
-            default: return 'status-inativo';
-        }
-    };
-
-    const getStatusText = (status) => {
-        const statusMap = {
-            'agendado': 'Agendado',
-            'em_andamento': 'Em Andamento',
-            'concluido': 'Concluído',
-            'cancelado': 'Cancelado',
-            'pendente': 'Pendente',
-        };
-        return statusMap[status] || status;
-    };
 
 
     if (loading) {
@@ -152,35 +121,12 @@ const HomePage = () => {
                 </div>
             </div>
 
-            <div className="card">
-                <div className="card-header">
-                    <h3 className="card-title">Próximos Agendamentos (Hoje)</h3>
+            {/* <-- 2. Substituir toda a lógica antiga pelo novo componente --> */}
+            <div className="row mt-4">
+                <div className="col-lg-6 col-md-12">
+                    <ProximosAgendamentos />
                 </div>
-                <div className="card-content">
-                    <ListGroup variant="flush">
-                        {recentAppointments.length === 0 ? (
-                            <ListGroup.Item className="text-center text-muted py-4">Nenhum agendamento para hoje.</ListGroup.Item>
-                        ) : (
-                            recentAppointments.map(app => (
-                                <ListGroup.Item key={app.cod_agendamento} className="list-item">
-                                    <div className="list-item-main-info">
-                                        <p className="list-item-title">{app.cliente_nome}</p>
-                                        <p className="list-item-subtitle">{app.servico_nome} - {app.veiculo_modelo} ({app.veiculo_placa})</p>
-                                    </div>
-                                    <div className="list-item-actions">
-                                        <span className="list-item-subtitle me-2">
-                                            <Clock size={16} style={{ verticalAlign: 'middle', marginRight: '5px' }} />
-                                            {new Date(app.data_hora_inicio).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                                        </span>
-                                        <span className={`status-badge ${getStatusColorClass(app.status)}`}>
-                                            {getStatusText(app.status)}
-                                        </span>
-                                    </div>
-                                </ListGroup.Item>
-                            ))
-                        )}
-                    </ListGroup>
-                </div>
+                {/* Você pode adicionar outros componentes do dashboard aqui */}
             </div>
         </div>
     );

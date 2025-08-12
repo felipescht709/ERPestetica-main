@@ -3,36 +3,55 @@ import React, { useState, useEffect, useCallback } from 'react';
 import api from '../utils/api';
 import moment from 'moment';
 import { Spinner } from 'react-bootstrap';
+import { toast } from 'react-toastify';
+import ConfirmationModal from './ConfirmationModal'; // Importar o novo modal
 
 const AppointmentModal = ({ appointment, onClose, onSave }) => {
-    const [formData, setFormData] = useState({
-        cod_agendamento: appointment?.resource?.cod_agendamento || appointment?.id || null,
-        cliente_cod: appointment?.resource?.cliente_cod || '',
-        servico_cod: appointment?.resource?.servico_cod || '',
-        veiculo_cod: appointment?.resource?.veiculo_cod || '',
-        usuario_responsavel_cod: appointment?.resource?.usuario_responsavel_cod || '',
-        data: appointment?.start ? moment(appointment.start).format('YYYY-MM-DD') : '',
-        hora: appointment?.start ? moment(appointment.start).format('HH:mm') : '',
-        duracao_minutos: appointment?.resource?.duracao_minutos || (appointment?.end ? moment(appointment.end).diff(moment(appointment.start), 'minutes') : 60),
-        preco_total: appointment?.resource?.preco_total || '',
-        status: appointment?.resource?.status || 'agendado',
-        tipo_agendamento: appointment?.resource?.tipo_agendamento || 'presencial',
-        forma_pagamento: appointment?.resource?.forma_pagamento || '',
-        observacoes_agendamento: appointment?.resource?.observacoes_agendamento || '',
+    // 1. Define uma função que retorna um estado inicial limpo e previsível.
+    const getInitialState = () => ({
+        cod_agendamento: null,
+        cliente_cod: '',
+        servico_cod: '',
+        veiculo_cod: '',
+        usuario_responsavel_cod: '',
+        // Usa a data/hora do slot clicado, ou a data/hora atual como fallback.
+        data: appointment?.start ? moment(appointment.start).format('YYYY-MM-DD') : moment().format('YYYY-MM-DD'),
+        hora: appointment?.start ? moment(appointment.start).format('HH:mm') : moment().format('HH:mm'),
+        duracao_minutos: 60,
+        preco_total: '',
+        status: 'agendado',
+        tipo_agendamento: 'presencial',
+        forma_pagamento: '',
+        observacoes_agendamento: '',
     });
+    const [formData, setFormData] = useState(getInitialState()); // Inicializa com o estado limpo.
+
+    // NOVO: Estados para controlar a recorrência
+    const [isRecurrent, setIsRecurrent] = useState(false);
+    const [recorrencia, setRecorrencia] = useState({
+        frequencia: 'semanal', // 'diaria', 'semanal', 'mensal'
+        intervalo: 1,
+        data_fim: moment(appointment?.start).add(1, 'month').format('YYYY-MM-DD'),
+    });
+    const handleRecorrenciaChange = (e) => {
+        setRecorrencia(prev => ({ ...prev, [e.target.name]: e.target.value }));
+    };
 
     const [clientes, setClientes] = useState([]);
-    const [veiculos, setVeiculos] = useState([]); // Todos os veículos
     const [servicos, setServicos] = useState([]);
     const [funcionarios, setFuncionarios] = useState([]);
-    const [filteredVehicles, setFilteredVehicles] = useState([]); // Veículos filtrados por cliente
+    // ESTADOS APRIMORADOS:
+    const [clientVehicles, setClientVehicles] = useState([]); // Armazena apenas os veículos do cliente selecionado
+    const [isFetchingVehicles, setIsFetchingVehicles] = useState(false); // Controla o loading do select de veículos
 
     const [asyncState, setAsyncState] = useState({
         isSubmitting: false,
+        isDeleting: false,
         submissionError: null,
         isLoadingData: true,
         dataError: null,
     });
+    const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     const isEditing = !!appointment?.id;
 
@@ -43,18 +62,15 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
             try {
                 const [
                     clientsRes,
-                    vehiclesRes, // Buscar todos os veículos
                     servicesRes,
                     usersRes
                 ] = await Promise.all([
                     api('/clientes', { method: 'GET' }),
-                    api('/veiculos', { method: 'GET' }),
                     api('/servicos', { method: 'GET' }),
                     api('/usuarios', { method: 'GET' })
                 ]);
 
                 setClientes(clientsRes);
-                setVeiculos(vehiclesRes); // Armazena todos os veículos
                 setServicos(servicesRes);
                 setFuncionarios(usersRes.filter(u => ['tecnico', 'atendente', 'gerente', 'admin'].includes(u.role)));
 
@@ -68,44 +84,54 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
         fetchDependencies();
     }, []);
 
-    // Popula o formulário se estiver em modo de edição
+    // 2. Centraliza TODA a lógica de popular/resetar o formulário neste useEffect.
+    //    Ele agora reage corretamente a qualquer mudança no 'appointment'.
     useEffect(() => {
-        if (isEditing && appointment) {
+        if (appointment?.id) { // Modo de EDIÇÃO: um agendamento existente foi clicado.
             setFormData({
-                cod_agendamento: appointment.resource.cod_agendamento || appointment.id,
-                cliente_cod: appointment.resource.cliente_cod || '',
-                servico_cod: appointment.resource.servico_cod || '',
-                veiculo_cod: appointment.resource.veiculo_cod || '',
-                usuario_responsavel_cod: appointment.resource.usuario_responsavel_cod || '',
+                cod_agendamento: appointment.id,
+                cliente_cod: appointment.resource?.cliente_cod || '',
+                servico_cod: appointment.resource?.servico_cod || '',
+                veiculo_cod: appointment.resource?.veiculo_cod || '',
+                usuario_responsavel_cod: appointment.resource?.usuario_responsavel_cod || '',
                 data: moment(appointment.start).format('YYYY-MM-DD'),
                 hora: moment(appointment.start).format('HH:mm'),
-                duracao_minutos: appointment.resource.duracao_minutos || moment(appointment.end).diff(moment(appointment.start), 'minutes'),
-                preco_total: appointment.resource.preco_total || '',
-                status: appointment.resource.status || 'agendado',
-                tipo_agendamento: appointment.resource.tipo_agendamento || 'presencial',
-                forma_pagamento: appointment.resource.forma_pagamento || '',
-                observacoes_agendamento: appointment.resource.observacoes_agendamento || '',
+                duracao_minutos: appointment.resource?.duracao_minutos || moment(appointment.end).diff(moment(appointment.start), 'minutes'),
+                preco_total: appointment.resource?.preco_total || '',
+                status: appointment.resource?.status || 'agendado',
+                tipo_agendamento: appointment.resource?.tipo_agendamento || 'presencial',
+                forma_pagamento: appointment.resource?.forma_pagamento || '',
+                observacoes_agendamento: appointment.resource?.observacoes_agendamento || '',
             });
-        } else if (appointment?.start) {
-             // Para novos agendamentos criados clicando em um slot do calendário
-            setFormData(prev => ({
-                ...prev,
-                data: moment(appointment.start).format('YYYY-MM-DD'),
-                hora: moment(appointment.start).format('HH:mm'),
-                duracao_minutos: (appointment?.end ? moment(appointment.end).diff(moment(appointment.start), 'minutes') : 60),
-            }));
+        setIsRecurrent(false); // Garante que a recorrência esteja desativada ao editar.
+        } else { // Modo de CRIAÇÃO: um slot vazio ou o botão "Novo Agendamento" foi clicado.
+            // Garante que o formulário seja completamente resetado para um novo agendamento, usando a data do slot se disponível.
+            setFormData(getInitialState());
         }
-    }, [isEditing, appointment]);
+    }, [appointment]); 
 
-    // Efeito para filtrar veículos quando o cliente muda ou os veículos são carregados
+    // EFEITO INTELIGENTE: Busca veículos apenas quando o cliente muda.
     useEffect(() => {
-        if (formData.cliente_cod && veiculos.length > 0) {
-            setFilteredVehicles(veiculos.filter(v => v.cod_cliente === Number(formData.cliente_cod)));
-        } else {
-            setFilteredVehicles([]);
-        }
-    }, [formData.cliente_cod, veiculos]);
+        const fetchVehiclesForClient = async () => {
+            if (!formData.cliente_cod) {
+                setClientVehicles([]);
+                return;
+            }
+            setIsFetchingVehicles(true);
+            try {
+                // Usamos a rota que já existe para buscar veículos por cliente
+                const vehicles = await api(`/veiculos_clientes/by-client/${formData.cliente_cod}`, { method: 'GET' });
+                setClientVehicles(vehicles);
+            } catch (err) {
+                console.error(`Erro ao buscar veículos para o cliente ${formData.cliente_cod}:`, err);
+                setClientVehicles([]); // Limpa em caso de erro para não mostrar dados antigos
+            } finally {
+                setIsFetchingVehicles(false);
+            }
+        };
 
+        fetchVehiclesForClient();
+    }, [formData.cliente_cod]); // Dispara toda vez que o cliente_cod muda
 
     const handleChange = (e) => {
         const { name, value } = e.target;
@@ -145,6 +171,29 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
         return true;
     }, [formData]);
 
+    const handleDelete = () => {
+        if (!isEditing || !formData.cod_agendamento) return;
+        setShowConfirmModal(true); // Apenas abre o modal de confirmação
+    };
+
+    const executeDelete = async () => {
+        setShowConfirmModal(false); // Fecha o modal de confirmação
+        setAsyncState(prev => ({ ...prev, isDeleting: true, submissionError: null }));
+        try {
+            await api(`/agendamentos/${formData.cod_agendamento}`, {
+                method: 'DELETE',
+            });
+            toast.success('Agendamento cancelado com sucesso!');
+            onSave();
+        } catch (err) {
+            console.error('Erro ao cancelar agendamento:', err);
+            const errorMessage = err.msg || 'Não foi possível cancelar o agendamento.';
+            setAsyncState(prev => ({ ...prev, submissionError: errorMessage }));
+        } finally {
+            setAsyncState(prev => ({ ...prev, isDeleting: false }));
+        }
+    };
+
     const handleSubmit = async (e) => {
         e.preventDefault();
         if (!validateForm()) return;
@@ -173,23 +222,49 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
 
         try {
             let response;
-            if (isEditing) {
+            // Se for recorrente, chama a nova rota. A recorrência só está disponível para novos agendamentos.
+            if (isRecurrent && !isEditing) {
+                const payload = {
+                    agendamento: dataToSubmit,
+                    recorrencia: {
+                        ...recorrencia,
+                        intervalo: Number(recorrencia.intervalo)
+                    }
+                };
+                response = await api('/agendamentos/recorrentes', {
+                    method: 'POST',
+                    body: JSON.stringify(payload),
+                });
+                // Exibe um alerta com o resumo da operação
+                let successMessage = response.msg;
+                if (response.agendamentosIgnorados && response.agendamentosIgnorados.length > 0) {
+                    successMessage += `\n\n${response.agendamentosIgnorados.length} datas foram ignoradas por conflitos ou regras da agenda.`;
+                }
+                toast.info(successMessage, { autoClose: 10000, closeOnClick: true });
+
+            } else if (isEditing) {
                 response = await api(`/agendamentos/${formData.cod_agendamento}`, {
                     method: 'PUT',
                     body: JSON.stringify(dataToSubmit),
                 });
+                toast.success('Agendamento atualizado com sucesso!');
             } else {
+                // Criação de agendamento único
                 response = await api('/agendamentos', {
                     method: 'POST',
                     body: JSON.stringify(dataToSubmit),
                 });
+                toast.success('Agendamento criado com sucesso!');
             }
-            onSave(response); // Notifica a página pai que o agendamento foi salvo
+            onSave(); // Notifica a página pai para recarregar os dados
         } catch (err) {
-            console.error('Erro ao salvar agendamento:', err);
-            setAsyncState(prev => ({ ...prev, submissionError: err.message || 'Erro ao salvar agendamento.' }));
+            console.error('Erro detalhado ao salvar agendamento:', err);
+            const errorMessage = err.msg || 'Não foi possível salvar o agendamento. Verifique os dados e tente novamente.';
+            
+            setAsyncState(prev => ({ ...prev, submissionError: errorMessage }));
+           
         } finally {
-            setAsyncState(prev => ({ ...prev, isSubmitting: false }));
+            setAsyncState(prev => ({ ...prev, isSubmitting: false, isDeleting: false }));
         }
     };
 
@@ -217,6 +292,16 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
 
     return (
         <div className="modal-backdrop">
+            <ConfirmationModal
+                show={showConfirmModal}
+                onClose={() => setShowConfirmModal(false)}
+                onConfirm={executeDelete}
+                title="Confirmar Cancelamento"
+                message="Tem certeza que deseja cancelar este agendamento? Esta ação não pode ser desfeita."
+                confirmText="Sim, Cancelar"
+                isDestructive={true}
+            />
+
             <div className="modal-content">
                 <h3>{isEditing ? 'Editar Agendamento' : 'Novo Agendamento'}</h3>
                 <form onSubmit={handleSubmit}>
@@ -232,8 +317,8 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                                 className="input-field"
                             >
                                 <option value="">Selecione um cliente</option>
-                                {clientes.map(cli => (
-                                    <option key={cli.cod_cliente} value={cli.cod_cliente}>
+                                {clientes.map((cli, index) => (
+                                    <option key={`${cli.cod_cliente}-${index}`} value={cli.cod_cliente}>
                                         {cli.nome_cliente} ({cli.cpf})
                                     </option>
                                 ))}
@@ -246,14 +331,21 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                                 id="veiculo_cod"
                                 value={formData.veiculo_cod}
                                 onChange={handleChange}
+                                disabled={isFetchingVehicles || !formData.cliente_cod}
                                 className="input-field"
                             >
-                                <option value="">Selecione um veículo (opcional)</option>
-                                {filteredVehicles.map(vei => (
-                                    <option key={vei.cod_veiculo} value={vei.cod_veiculo}>
-                                        {vei.marca} {vei.modelo} ({vei.placa})
-                                    </option>
-                                ))}
+                                {isFetchingVehicles ? (
+                                    <option>Carregando veículos...</option>
+                                ) : (
+                                    <>
+                                        <option value="">Selecione um veículo (opcional)</option>
+                                        {clientVehicles.map((vei, index) => (
+                                            <option key={`${vei.cod_veiculo}-${index}`} value={vei.cod_veiculo}>
+                                                {vei.marca} {vei.modelo} ({vei.placa})
+                                            </option>
+                                        ))}
+                                    </>
+                                )}
                             </select>
                         </div>
                     </div>
@@ -270,8 +362,8 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                                 className="input-field"
                             >
                                 <option value="">Selecione um serviço</option>
-                                {servicos.map(serv => (
-                                    <option key={serv.cod_servico} value={serv.cod_servico}>
+                                {servicos.map((serv, index) => (
+                                    <option key={`${serv.cod_servico}-${index}`} value={serv.cod_servico}>
                                         {serv.nome_servico} (R$ {Number(serv.preco).toFixed(2).replace('.', ',')})
                                     </option>
                                 ))}
@@ -287,8 +379,8 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                                 className="input-field"
                             >
                                 <option value="">Nenhum</option>
-                                {funcionarios.map(func => (
-                                    <option key={func.cod_usuario} value={func.cod_usuario}>
+                                {funcionarios.map((func, index) => (
+                                    <option key={`${func.cod_usuario}-${index}`} value={func.cod_usuario}>
                                         {func.nome_usuario} ({func.role})
                                     </option>
                                 ))}
@@ -408,19 +500,77 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                         ></textarea>
                     </div>
 
+                    {/* SEÇÃO DE RECORRÊNCIA - SÓ APARECE PARA NOVOS AGENDAMENTOS */}
+                    {!isEditing && (
+                        <div className="recorrencia-section">
+                            <div className="form-group form-check">
+                                <input
+                                    type="checkbox"
+                                    className="form-check-input"
+                                    id="isRecurrent"
+                                    checked={isRecurrent}
+                                    onChange={(e) => setIsRecurrent(e.target.checked)}
+                                />
+                                <label className="form-check-label" htmlFor="isRecurrent">
+                                    Repetir este agendamento
+                                </label>
+                            </div>
+
+                            {isRecurrent && (
+                                <div className="form-row">
+                                    <div className="form-group">
+                                        <label htmlFor="frequencia">Frequência:</label>
+                                        <select name="frequencia" value={recorrencia.frequencia} onChange={handleRecorrenciaChange} className="input-field">
+                                            <option value="diaria">Diária</option>
+                                            <option value="semanal">Semanal</option>
+                                            <option value="mensal">Mensal</option>
+                                        </select>
+                                    </div>
+                                    <div className="form-group">
+                                        <label htmlFor="intervalo">A cada:</label>
+                                        <input type="number" name="intervalo" value={recorrencia.intervalo} onChange={handleRecorrenciaChange} min="1" className="input-field" />
+                                    </div>
+                                    <div className="form-group">
+                                        <label htmlFor="data_fim">Até:</label>
+                                        <input
+                                            type="date"
+                                            name="data_fim"
+                                            value={recorrencia.data_fim}
+                                            onChange={handleRecorrenciaChange}
+                                            min={formData.data} // Não pode terminar antes de começar
+                                            className="input-field"
+                                        />
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
                     <div className="modal-actions">
-                        <button type="button" className="button-secondary" onClick={onClose} disabled={asyncState.isSubmitting}>
-                            Cancelar
-                        </button>
-                        <button type="submit" className="button-primary" disabled={asyncState.isSubmitting}>
-                            {asyncState.isSubmitting ? (
-                                <>
-                                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
-                                    <span className="ms-2">Salvando...</span>
-                                </>
-                            ) : 'Salvar Agendamento'}
-                        </button>
-                    </div>
+                                            {isEditing && (
+                                                <button
+                                                    type="button"
+                                                    className="button-danger me-auto" // 'me-auto' alinha este botão à esquerda
+                                                    onClick={handleDelete}
+                                                    disabled={asyncState.isDeleting || asyncState.isSubmitting}
+                                                >
+                                                    {asyncState.isDeleting ? (
+                                                        <><Spinner as="span" animation="border" size="sm" /> Cancelando...</>
+                                                    ) : 'Cancelar Agendamento'}
+                                                </button>
+                                            )}
+                                            <button type="button" className="button-secondary" onClick={onClose} disabled={asyncState.isSubmitting || asyncState.isDeleting}>
+                                                Cancelar
+                                            </button>
+                                            <button type="submit" className="button-primary" disabled={asyncState.isSubmitting || asyncState.isDeleting}>
+                                                {asyncState.isSubmitting ? (
+                                                    <>
+                                                        <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
+                                                        <span className="ms-2">Salvando...</span>
+                                                    </>
+                                                ) : 'Salvar Agendamento'}
+                                            </button>
+                                        </div>
 
                     {asyncState.submissionError && (
                         <div className="alert error mt-3">{asyncState.submissionError}</div>

@@ -1,94 +1,264 @@
-// frontend/src/pages/AgendaPage.jsx
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
-import moment from 'moment'; // Mantenha a importação de moment
-
-// REMOVA ESTA LINHA: import 'moment/locale/pt-br'; // Já está no main.jsx
-// REMOVA ESTA LINHA: moment.locale('pt-br'); // Já está no main.jsx
-
+import moment from 'moment';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
+import 'moment/locale/pt-br'; // Importa a localização em português
 
 import { AuthContext } from '../context/AuthContext';
 import api from '../utils/api';
 import AppointmentModal from '../components/AppointmentModal';
 
-import { Spinner, Alert } from 'react-bootstrap';
-import { Plus, Calendar as CalendarIcon } from 'lucide-react';
+import { Spinner } from 'react-bootstrap';
+import { Plus, Coffee } from 'lucide-react';
 
-const localizer = momentLocalizer(moment); // Inicializa o localizer com o moment globalmente configurado
+// Define o locale globalmente para toda a aplicação
+moment.locale('pt-br');
+// Inicializa o localizer do moment, que já deve estar configurado para pt-br globalmente
+const localizer = momentLocalizer(moment);
 
+// Objeto de formatação completo para corrigir os títulos e garantir o pt-br
 localizer.formats = {
-    dateFormat: 'DD/MM',
-    dayFormat: 'dddd',   // Mude para 'dddd' para o nome completo do dia da semana
-    weekdayFormat: 'dddd', // Garante que o cabeçalho semanal também use o nome completo
+    // Formats for Month View
     monthHeaderFormat: 'MMMM YYYY',
-    agendaHeaderFormat: 'DD MMMM YYYY',
+    weekdayFormat: 'ddd', // Header for days of the week: Seg, Ter, Qua...
+    dateFormat: 'DD', // Just the number for the day in the month grid
+
+    // Formats for Week View
+    dayRangeHeaderFormat: ({ start, end }, culture, local) =>
+        local.format(start, 'DD [de] MMMM', culture) + ' – ' + local.format(end, 'DD [de] MMMM [de] YYYY', culture),
+    dayFormat: 'ddd, DD/MM', // Header for each day column: Seg, 16/09
+
+    // Format for Day View
+    dayHeaderFormat: 'dddd, DD [de] MMMM [de] YYYY',
+
+    // Formats for Agenda (List) View
+    agendaHeaderFormat: ({ start, end }, culture, local) =>
+        local.format(start, 'dddd, DD/MM/YYYY', culture),
+    agendaDateFormat: 'ddd, DD/MM', // Date format for each item in the list
+    agendaTimeFormat: 'HH:mm', // Time for each item in the list
+    agendaTimeRangeFormat: ({ start, end }, culture, local) =>
+        local.format(start, 'HH:mm', culture) + ' – ' + local.format(end, 'HH:mm', culture),
+
+    // Formats for Time Slots and Events
     timeGutterFormat: 'HH:mm',
     eventTimeRangeFormat: ({ start, end }, culture, local) =>
-        local.format(start, 'HH:mm', culture) + ' - ' + local.format(end, 'HH:mm', culture),
-    eventTimeRangeStartFormat: ({ start }, culture, local) => local.format(start, 'HH:mm', culture) + ' - ',
-    eventTimeRangeEndFormat: ({ end }, culture, local) => ' - ' + local.format(end, 'HH:mm', culture),
+        local.format(start, 'HH:mm', culture) + ' – ' + local.format(end, 'HH:mm', culture),
 };
 
 
 const AgendaPage = () => {
+    // Seus estados existentes
     const [events, setEvents] = useState([]);
-    const [loading, setLoading] = useState(false);
+    const [loading, setLoading] = useState(true);
     const [error, setError] = useState(null);
     const [showModal, setShowModal] = useState(false);
     const [selectedAppointment, setSelectedAppointment] = useState(null);
     const [currentViewDate, setCurrentViewDate] = useState(new Date());
     const [currentView, setCurrentView] = useState('month');
-
-    const { userRole } = useContext(AuthContext);
-
-    const fetchAppointments = useCallback(async (start, end) => {
-        setLoading(true);
-        setError(null);
-        try {
-            const response = await api(`/agendamentos?start=${moment(start).toISOString()}&end=${moment(end).toISOString()}`, { method: 'GET' });
-            
-            const mappedEvents = response.map(app => ({
-                id: app.cod_agendamento,
-                title: `${app.cliente_nome} - ${app.servico_nome} ${app.veiculo_placa ? `(${app.veiculo_placa})` : ''}`,
-                start: new Date(app.data_hora_inicio),
-                end: new Date(app.data_hora_fim),
-                allDay: false,
-                resource: {
-                    cod_agendamento: app.cod_agendamento,
-                    cliente_cod: app.cod_cliente,
-                    servico_cod: app.cod_servico,
-                    veiculo_cod: app.cod_veiculo,
-                    usuario_responsavel_cod: app.usuario_responsavel_cod,
-                    preco_total: app.preco_total,
-                    status: app.status,
-                    tipo_agendamento: app.tipo_agendamento,
-                    forma_pagamento: app.forma_pagamento,
-                    observacoes_agendamento: app.observacoes_agendamento,
-                    duracao_minutos: app.duracao_minutos,
+    const [configRules, setConfigRules] = useState([]);
+    const [funcionarios, setFuncionarios] = useState([]);
+        const [servicos, setServicos] = useState([]);
+        const [selectedFuncionarios, setSelectedFuncionarios] = useState([]);
+        const [selectedServicos, setSelectedServicos] = useState([]);
+        const [selectedStatus, setSelectedStatus] = useState([]);
+        const { userRole } = useContext(AuthContext);
+    
+        const statusOptions = [
+            { value: 'agendado', label: 'Agendado' },
+            { value: 'em_andamento', label: 'Em Andamento' },
+            { value: 'concluido', label: 'Concluído' },
+            { value: 'cancelado', label: 'Cancelado' },
+            { value: 'pendente', label: 'Pendente' },
+        ];    
+        // NOVO: Callback para aplicar estilos aos eventos do calendário
+        const eventPropGetter = useCallback(
+            (event) => {
+                // Estilo para eventos de bloqueio (almoço/pausas)
+                if (event.isBlocker) {
+                    return {
+                        className: 'rbc-event-blocked',
+                        style: {
+                            backgroundColor: '#e0e0e0', // Cinza claro
+                            borderColor: '#b0b0b0',
+                            color: '#616161',
+                        }
+                    };
                 }
+    
+                // Estilo padrão para agendamentos normais
+                const style = {
+                    backgroundColor: event.backgroundColor,
+                    borderColor: event.borderColor,
+                    borderRadius: '5px',
+                    color: '#fff',
+                    border: '0px',
+                    display: 'block'
+                };
+                return { style };
+            },
+            []
+        );
+
+        // Função para gerar eventos de bloqueio (almoço, pausas)
+        const generateBlockerEvents = (rules, viewStart, viewEnd) => {
+            const blockerEvents = [];
+            const intervalRules = rules.filter(r => r.tipo_regra === 'intervalo_almoco' && r.ativo);
+    
+            for (let m = moment(viewStart); m.isSameOrBefore(viewEnd); m.add(1, 'days')) {
+                const dayOfWeek = m.day();
+                const ruleForDay = intervalRules.find(r => r.dia_semana === dayOfWeek);
+    
+                if (ruleForDay) {
+                    const diaFormatado = m.format('YYYY-MM-DD');
+                    blockerEvents.push({
+                        id: `blocker-${diaFormatado}-${ruleForDay.cod_configuracao}`,
+                        title: ruleForDay.descricao || 'Intervalo',
+                        start: moment.tz(`${diaFormatado} ${ruleForDay.hora_inicio}`, "America/Sao_Paulo").toDate(),
+                        end: moment.tz(`${diaFormatado} ${ruleForDay.hora_fim}`, "America/Sao_Paulo").toDate(),
+                        isBlocker: true,
+                    });
+                }
+            }
+            return blockerEvents;
+        };
+
+        // Função otimizada para buscar agendamentos e regras da agenda em paralelo
+         const fetchData = useCallback(async (start, end, filters) => {
+            setLoading(true);
+            setError(null);
+            try {
+                            const params = new URLSearchParams({
+                                start: moment(start).toISOString(),
+                                end: moment(end).toISOString(),
+                            });
+            
+                            if (filters.responsaveis?.length > 0) {
+                                params.append('responsaveis', filters.responsaveis.join(','));
+                            }
+                            if (filters.status?.length > 0) {
+                                params.append('status', filters.status.join(','));
+                            }
+                            if (filters.servicos?.length > 0) {
+                                params.append('servicos', filters.servicos.join(','));
+                            }
+                            const apiUrl = `/agendamentos?${params.toString()}`;
+                
+                            const [appointmentsResponse, configResponse] = await Promise.all([
+                                api(apiUrl, { method: 'GET' }),
+                                api('/agenda/config', { method: 'GET' })
+                            ]);
+
+            // ATUALIZAÇÃO: Mapeamento simplificado para usar as cores e aliases da API
+            const mappedEvents = appointmentsResponse.map(app => ({
+                ...app, // Passa todas as propriedades da API (title, backgroundColor, borderColor, etc)
+                id: app.cod_agendamento, // Garante que o ID está correto
+                start: new Date(app.start), // Converte a string de data para objeto Date
+                end: new Date(app.end),     // Converte a string de data para objeto Date
+                resource: { ...app } // Armazena todos os dados originais para o modal
             }));
-            setEvents(mappedEvents);
+
+            // Gera os eventos de bloqueio e os mescla com os agendamentos
+            const blockerEvents = generateBlockerEvents(configResponse, start, end);
+
+            setEvents([...mappedEvents, ...blockerEvents]);
+            setConfigRules(Array.isArray(configResponse) ? configResponse : []);
+
         } catch (err) {
-            console.error('Erro ao buscar agendamentos:', err);
-            setError(err.message || 'Erro ao carregar agendamentos.');
+            console.error('Erro ao buscar dados da agenda:', err);
+            setError(err.message || 'Erro ao carregar dados da agenda.');
         } finally {
             setLoading(false);
         }
-    }, []);
-
+    }, [generateBlockerEvents]); // Adiciona a nova função como dependência
+    // Efeito para buscar a lista de funcionários e serviços uma única vez
     useEffect(() => {
-        const start = moment(currentViewDate).startOf(currentView).toDate();
-        const end = moment(currentViewDate).endOf(currentView).toDate();
-        fetchAppointments(start, end);
-    }, [currentViewDate, currentView, fetchAppointments]);
-
-    const handleSelectSlot = useCallback(({ start, end }) => {
-        setSelectedAppointment({ start, end });
-        setShowModal(true);
+        const fetchFilterData = async () => {
+            try {
+                const [usersRes, servicesRes] = await Promise.all([
+                    api('/usuarios', { method: 'GET' }),
+                    api('/servicos', { method: 'GET' })
+                ]);
+                // Filtra para incluir apenas usuários que podem ser responsáveis
+                setFuncionarios(usersRes.filter(u => ['tecnico', 'atendente', 'gerente', 'admin'].includes(u.role)));
+                setServicos(servicesRes);
+            } catch (err) {
+                console.error("Erro ao buscar dados para filtros:", err);
+            }
+        };
+        fetchFilterData();
     }, []);
+
+    // Efeito para buscar os dados sempre que a data ou a visualização mudam
+        useEffect(() => {
+            let start, end;
+    
+            // Lógica para definir o intervalo de datas com base na visualização
+            if (currentView === 'agenda') {
+                // Para a visualização 'agenda', buscamos um período fixo (ex: 30 dias) a partir da data atual
+                start = moment(currentViewDate).startOf('day').toDate();
+                end = moment(currentViewDate).add(30, 'days').endOf('day').toDate();
+            } else {
+                // Para as outras visualizações (mês, semana, dia), usamos o início/fim da própria visualização
+                start = moment(currentViewDate).startOf(currentView).toDate();
+                end = moment(currentViewDate).endOf(currentView).toDate();
+            }
+           const currentFilters = {
+                responsaveis: selectedFuncionarios,
+                status: selectedStatus,
+                servicos: selectedServicos,
+            };
+            fetchData(start, end, currentFilters);
+        }, [currentViewDate, currentView, fetchData, selectedFuncionarios, selectedStatus, selectedServicos]);
+
+    // Função poderosa que aplica estilos aos dias do calendário
+    const dayPropGetter = useCallback((date) => {
+        const diaFormatado = moment(date).format('YYYY-MM-DD');
+        
+        // Procura por regras de feriado/bloqueio ativas
+        const diaBloqueado = configRules.find(
+            rule => rule.tipo_regra === 'feriado' && rule.ativo && moment(rule.data_especifica).format('YYYY-MM-DD') === diaFormatado
+        );
+
+        if (diaBloqueado) {
+            return {
+                className: 'rbc-day-bg-blocked',
+                title: diaBloqueado.descricao || 'Dia bloqueado'
+            };
+        }
+
+        // Procura por dias da semana sem expediente
+        const diaDaSemana = moment(date).day();
+        const regraDoDia = configRules.find(
+            rule => rule.tipo_regra === 'horario_trabalho' && rule.dia_semana === diaDaSemana
+        );
+        
+        if (!regraDoDia || !regraDoDia.ativo) {
+            return {
+                className: 'rbc-day-bg-closed',
+                title: 'Fechado'
+            };
+        }
+
+        return {}; // Retorna um objeto vazio para dias normais
+    }, [configRules]);
+
+    // Previne a abertura do modal em dias bloqueados
+    const handleSelectSlot = useCallback(({ start }) => {
+        const props = dayPropGetter(start);
+        if (props.className === 'rbc-day-bg-blocked' || props.className === 'rbc-day-bg-closed') {
+            alert(props.title || "Este dia não está disponível para agendamentos.");
+            return;
+        }
+
+        setSelectedAppointment({ start, end: moment(start).add(60, 'minutes').toDate() });
+        setShowModal(true);
+    }, [dayPropGetter]);
 
     const handleSelectEvent = useCallback((event) => {
+        // Impede a abertura do modal para eventos de bloqueio
+        if (event.isBlocker) {
+            return;
+        }
         setSelectedAppointment(event);
         setShowModal(true);
     }, []);
@@ -102,33 +272,72 @@ const AgendaPage = () => {
     }, []);
 
     if (loading) {
-        return (
-            <div className="loading-screen">
-                <Spinner animation="border" role="status">
-                    <span className="visually-hidden">Carregando...</span>
-                </Spinner>
-            </div>
-        );
+        return <div className="loading-screen"><Spinner animation="border" /></div>;
+    }
+
+    const currentFilters = {
+        responsaveis: selectedFuncionarios,
+        status: selectedStatus,
+        servicos: selectedServicos,
     }
 
     if (error) {
-        return (
-            <div className="alert error my-4">
-                <h3>Erro ao Carregar Agenda</h3>
-                <p>{error}</p>
-            </div>
-        );
+        return <div className="alert error my-4"><h3>Erro</h3><p>{error}</p></div>;
     }
 
     return (
-        <div className="page-container">
-            <div className="page-section-header">
-                <h2>Agenda de Agendamentos</h2>
-                <button className="btn-primary-dark" onClick={() => handleSelectSlot({ start: new Date(), end: new Date(Date.now() + 60 * 60 * 1000) })}>
-                    <Plus size={20} />
-                    Novo Agendamento
-                </button>
-            </div>
+            <div className="page-container">
+                        <div className="page-header-controls">
+                            <h2>Agenda de Agendamentos</h2>
+                            <div className="actions-and-filters">
+                                <div className="filter-group" title="Segure CTRL (ou Command em Mac) para selecionar múltiplos">
+                                    <label htmlFor="status-filter">Status</label>
+                                    <select id="status-filter" multiple value={selectedStatus}
+                                        onChange={(e) => setSelectedStatus(Array.from(e.target.selectedOptions, o => o.value))}
+                                        className="form-control">
+                                        {statusOptions.map(s => (
+                                            <option key={s.value} value={s.value}>{s.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="filter-group" title="Segure CTRL (ou Command em Mac) para selecionar múltiplos">
+                                    <label htmlFor="servico-filter">Serviço</label>
+                                    <select id="servico-filter" multiple value={selectedServicos}
+                                        onChange={(e) => setSelectedServicos(Array.from(e.target.selectedOptions, o => o.value))}
+                                        className="form-control">
+                                        {servicos.map(s => (
+                                            <option key={s.cod_servico} value={s.cod_servico}>{s.nome_servico}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="filter-group" title="Segure CTRL (ou Command em Mac) para selecionar múltiplos">
+                                    <label htmlFor="funcionario-filter">Responsável</label>
+                                    <select id="funcionario-filter" multiple value={selectedFuncionarios}
+                                        onChange={(e) => setSelectedFuncionarios(Array.from(e.target.selectedOptions, o => o.value))}
+                                        className="form-control">
+                                        {funcionarios.map(f => (
+                                            <option key={f.cod_usuario} value={f.cod_usuario}>{f.nome_usuario}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                                {(selectedFuncionarios.length > 0 || selectedServicos.length > 0 || selectedStatus.length > 0) && (
+                                    <button 
+                                        className="btn-secondary-outline" 
+                                        onClick={() => {
+                                            setSelectedFuncionarios([]);
+                                            setSelectedServicos([]);
+                                            setSelectedStatus([]);
+                                        }}
+                                        title="Limpar todos os filtros"
+                                    >
+                                        Limpar Filtros
+                                    </button>
+                                )}
+                                <button className="btn-primary-dark" onClick={() => handleSelectSlot({ start: new Date() })}>
+                                    <Plus size={20} /> Novo Agendamento
+                                </button>
+                            </div>
+                        </div>
 
             <div style={{ height: '700px' }}>
                 <Calendar
@@ -145,6 +354,8 @@ const AgendaPage = () => {
                     view={currentView}
                     date={currentViewDate}
                     culture='pt-br'
+                    dayPropGetter={dayPropGetter} // Aplica os estilos dinâmicos aos dias
+                    eventPropGetter={eventPropGetter} // <-- AQUI A MÁGICA ACONTECE
                     messages={{
                         allDay: 'Dia Inteiro',
                         previous: 'Anterior',
@@ -160,14 +371,15 @@ const AgendaPage = () => {
                         noEventsInRange: 'Nenhum agendamento neste período.',
                         showMore: total => `+ Ver mais (${total})`
                     }}
-                    min={new Date(0, 0, 0, 6, 0, 0)}
-                    max={new Date(0, 0, 0, 20, 0, 0)}
+                    min={new Date(0, 0, 0, 6, 0, 0)} // Horário mínimo visível
+                    max={new Date(0, 0, 0, 20, 0, 0)} // Horário máximo visível
                 />
             </div>
 
             {showModal && (
                 <AppointmentModal
                     appointment={selectedAppointment}
+                    configRules={configRules}
                     onClose={() => {
                         setShowModal(false);
                         setSelectedAppointment(null);
@@ -175,9 +387,10 @@ const AgendaPage = () => {
                     onSave={() => {
                         setShowModal(false);
                         setSelectedAppointment(null);
+                        // Recarrega os dados para mostrar o novo agendamento
                         const start = moment(currentViewDate).startOf(currentView).toDate();
                         const end = moment(currentViewDate).endOf(currentView).toDate();
-                        fetchAppointments(start, end);
+                        fetchData(start, end, currentFilters);
                     }}
                 />
             )}

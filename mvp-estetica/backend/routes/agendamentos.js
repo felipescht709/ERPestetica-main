@@ -52,37 +52,41 @@ const checkAppointmentConflicts = async (
     return { hasConflict: result.rows.length > 0, conflictingIds: result.rows.map(row => row.cod_agendamento) };
 };
 
-// GET all appointments (multi-tenant) - ROTA ATUALIZADA
+// GET all appointments (multi-tenant) - ROTA CORRIGIDA
 router.get('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente', 'tecnico']), async (req, res) => {
     try {
         const { cod_usuario_empresa } = req.user;
-        // NOVO: Adicionado 'responsaveis' para filtro de multi-agenda
-        const { start, end, status, responsaveis } = req.query;
+        const { start, end, status, responsaveis, servicos } = req.query;
 
+        // A query foi atualizada para incluir todos os campos necessários para a edição no modal.
         let query = `
             SELECT
                 a.cod_agendamento,
-                a.data_hora_inicio,
-                a.data_hora_fim,
+                a.cliente_cod,
+                a.servico_cod,
+                a.veiculo_cod,
+                a.usuario_responsavel_cod,
+                a.duracao_minutos,
                 a.preco_total,
-                a.status,
                 a.tipo_agendamento,
                 a.forma_pagamento,
-                a.observacoes_agendamento,
-                a.duracao_minutos,
-                c.cod_cliente,
-                c.nome_cliente AS cliente_nome,
-                c.telefone AS cliente_telefone,
-                s.cod_servico,
-                s.nome_servico AS servico_nome,
-                s.descricao_servico AS servico_descricao,
-                v.cod_veiculo,
-                v.marca AS veiculo_marca,
-                v.modelo AS veiculo_modelo,
-                v.cor AS veiculo_cor,
+                a.data_hora_inicio AS "start",
+                a.data_hora_fim AS "end",
+                a.status,
+                c.nome_cliente || ' - ' || s.nome_servico AS "title",
+                s.nome_servico,
+                CASE a.status
+                    WHEN 'concluido' THEN '#28a745'
+                    WHEN 'em_andamento' THEN '#ffc107'
+                    WHEN 'cancelado' THEN '#6c757d'
+                    WHEN 'pendente' THEN '#6f42c1'
+                    ELSE '#007bff'
+                END AS "backgroundColor",
+                CASE a.status WHEN 'concluido' THEN '#28a745' WHEN 'em_andamento' THEN '#ffc107' WHEN 'cancelado' THEN '#6c757d' WHEN 'pendente' THEN '#6f42c1' ELSE '#007bff' END AS "borderColor",
                 v.placa AS veiculo_placa,
-                u.cod_usuario AS usuario_responsavel_cod,
-                u.nome_usuario AS usuario_responsavel_nome
+                v.modelo AS veiculo_modelo,
+                u.nome_usuario AS usuario_responsavel_nome,
+                a.observacoes_agendamento
             FROM agendamentos a
             JOIN clientes c ON a.cliente_cod = c.cod_cliente
             JOIN servicos s ON a.servico_cod = s.cod_servico
@@ -98,16 +102,24 @@ router.get('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente
             params.push(start, end);
         }
         if (status) {
-            query += ` AND a.status = $${paramIndex++}`;
-            params.push(status);
+            const statusArray = status.split(',').map(s => s.trim());
+            if (statusArray.length > 0) {
+                query += ` AND a.status = ANY($${paramIndex++}::text[])`;
+                params.push(statusArray);
+            }
         }
-
-        // NOVO: Bloco para filtrar por um ou mais responsáveis
         if (responsaveis) {
             const responsaveisArray = responsaveis.split(',').map(id => parseInt(id, 10));
             if (responsaveisArray.length > 0) {
                 query += ` AND a.usuario_responsavel_cod = ANY($${paramIndex++}::int[])`;
                 params.push(responsaveisArray);
+            }
+        }
+        if (servicos) {
+            const servicosArray = servicos.split(',').map(id => parseInt(id, 10));
+            if (servicosArray.length > 0) {
+                query += ` AND a.servico_cod = ANY($${paramIndex++}::int[])`;
+                params.push(servicosArray);
             }
         }
 
@@ -121,10 +133,14 @@ router.get('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente
     }
 });
 
+// =============================================================================
+// ROTA POST / (Criar Agendamento) - CÓDIGO COMPLETO E ATUALIZADO
+// =============================================================================
 router.post('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente']), async (req, res) => {
     const {
         cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod,
-        data_hora_inicio, duracao_minutos, /* ...resto dos campos... */
+        data_hora_inicio, duracao_minutos, preco_total, status, tipo_agendamento,
+        forma_pagamento, observacoes_agendamento
     } = req.body;
     const { cod_usuario_empresa } = req.user;
     const client = await pool.connect();
@@ -132,65 +148,89 @@ router.post('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendent
     try {
         await client.query('BEGIN');
 
-        // Busca TODAS as regras, incluindo o nosso novo "interruptor"
-        const regrasResult = await client.query(
-            "SELECT * FROM configuracoes_agenda WHERE cod_usuario_empresa = $1",
-            [cod_usuario_empresa]
-        );
+        // 1. Buscar todas as regras ativas da empresa de uma só vez
+        const regrasResult = await client.query("SELECT * FROM configuracoes_agenda WHERE cod_usuario_empresa = $1 AND ativo = true", [cod_usuario_empresa]);
         const regras = regrasResult.rows;
 
-        // --- INTERRUPTOR DE SEGURANÇA ---
-        // Verificamos se as validações avançadas estão ativadas.
-        const validacoesAvancadasAtivas = regras.find(r => r.tipo_regra === 'ativar_validacoes_avancadas' && r.ativo === true);
+        const dataAgendamento = moment.tz(data_hora_inicio, "America/Sao_Paulo");
+        const data_hora_fim_obj = dataAgendamento.clone().add(duracao_minutos, 'minutes');
+        const diaDaSemana = dataAgendamento.day(); // 0 = Domingo, 1 = Segunda...
+        const diaFormatado = dataAgendamento.format('YYYY-MM-DD');
 
-        if (validacoesAvancadasAtivas) {
-            // Se estiverem ativas, o "policial" entra em ação.
-            const dataAgendamento = moment.tz(data_hora_inicio, "America/Sao_Paulo");
-            const data_hora_fim = dataAgendamento.clone().add(duracao_minutos, 'minutes');
+        // Buscar detalhes do serviço para obter a capacidade específica
+        const servicoResult = await client.query("SELECT nome_servico, capacidade_simultanea FROM servicos WHERE cod_servico = $1", [servico_cod]);
+        const servicoInfo = servicoResult.rows[0];
 
-            // VALIDAÇÃO 1: DIAS DE BLOQUEIO
-            const diaFormatado = dataAgendamento.format('YYYY-MM-DD');
-            const diaBloqueado = regras.find(r => r.tipo_regra === 'feriado' && r.ativo && moment(r.data_especifica).format('YYYY-MM-DD') === diaFormatado);
-            if (diaBloqueado) {
-                await client.query('ROLLBACK');
-                return res.status(400).json({ msg: `Agendamento bloqueado no dia ${dataAgendamento.format('DD/MM/YYYY')}. Motivo: ${diaBloqueado.descricao}` });
-            }
-
-            // VALIDAÇÃO 2: HORÁRIO DE FUNCIONAMENTO
-            const diaDaSemana = dataAgendamento.day();
-            const regraDoDia = regras.find(r => r.tipo_regra === 'horario_trabalho' && r.ativo && r.dia_semana === diaDaSemana);
-            if (!regraDoDia) {
-                await client.query('ROLLBACK');
-                return res.status(400).json({ msg: `Não há expediente configurado para ${dataAgendamento.format('dddd')}.` });
-            }
+        // 2. Executar validações de regras da agenda (se existirem)
+        const regraDoDia = regras.find(r => r.tipo_regra === 'horario_trabalho' && r.dia_semana === diaDaSemana);
+        if (regraDoDia) {
+            // VALIDAÇÃO: HORÁRIO DE FUNCIONAMENTO
             const horaInicioTrabalho = moment.tz(`${diaFormatado} ${regraDoDia.hora_inicio}`, "America/Sao_Paulo");
             const horaFimTrabalho = moment.tz(`${diaFormatado} ${regraDoDia.hora_fim}`, "America/Sao_Paulo");
-            if (dataAgendamento.isBefore(horaInicioTrabalho) || data_hora_fim.isAfter(horaFimTrabalho)) {
+            if (dataAgendamento.isBefore(horaInicioTrabalho) || data_hora_fim_obj.isAfter(horaFimTrabalho)) {
                 await client.query('ROLLBACK');
                 return res.status(400).json({ msg: `Horário fora do expediente. Na ${dataAgendamento.format('dddd')}, o atendimento é das ${regraDoDia.hora_inicio} às ${regraDoDia.hora_fim}.` });
             }
-            
-            // VALIDAÇÃO 3: LIMITE DIÁRIO
-            const regraLimiteDiario = regras.find(r => r.tipo_regra === 'limite_agendamentos_dia' && r.ativo);
-            if (regraLimiteDiario && regraLimiteDiario.valor_numerico !== null) {
-                const limite = regraLimiteDiario.valor_numerico;
-                const agendamentosNoDiaResult = await client.query("SELECT COUNT(*) FROM agendamentos WHERE data_hora_inicio::date = $1 AND cod_usuario_empresa = $2 AND status <> 'cancelado'", [data_hora_inicio, cod_usuario_empresa]);
-                if (parseInt(agendamentosNoDiaResult.rows[0].count) >= limite) {
-                    await client.query('ROLLBACK');
-                    return res.status(400).json({ msg: `Limite de ${limite} agendamentos para este dia foi atingido.` });
-                }
+        } else {
+             await client.query('ROLLBACK');
+             return res.status(400).json({ msg: `Não há expediente configurado para ${dataAgendamento.format('dddd')}.` });
+        }
+
+        // VALIDAÇÃO: INTERVALO DE ALMOÇO/PAUSA
+        const regraPausa = regras.find(r => r.tipo_regra === 'intervalo_almoco' && r.dia_semana === diaDaSemana && r.ativo);
+        if (regraPausa) {
+            const horaInicioPausa = moment.tz(`${diaFormatado} ${regraPausa.hora_inicio}`, "America/Sao_Paulo");
+            const horaFimPausa = moment.tz(`${diaFormatado} ${regraPausa.hora_fim}`, "America/Sao_Paulo");
+
+            if (dataAgendamento.isBefore(horaFimPausa) && data_hora_fim_obj.isAfter(horaInicioPausa)) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ msg: `O horário solicitado está em conflito com o intervalo de pausa (${regraPausa.hora_inicio} - ${regraPausa.hora_fim}).` });
             }
         }
-        // --- FIM DAS VALIDAÇÕES AVANÇADAS ---
-        // SEU CÓDIGO ORIGINAL E INTACTO RODA AQUI:
-        const data_hora_fim_iso = moment(data_hora_inicio).add(duracao_minutos, 'minutes').toISOString();
+        // <-- LÓGICA DE CAPACIDADE APRIMORADA -->
+        if (servicoInfo && servicoInfo.capacidade_simultanea > 0) {
+            // VALIDAÇÃO DE CAPACIDADE POR SERVIÇO
+            const capacidadeServico = servicoInfo.capacidade_simultanea;
+            const agendamentosServicoResult = await client.query(
+                `SELECT COUNT(cod_agendamento) FROM agendamentos
+                 WHERE cod_usuario_empresa = $1 AND servico_cod = $2 AND status IN ('agendado', 'em_andamento')
+                 AND (data_hora_inicio, data_hora_fim) OVERLAPS ($3::timestamp, $4::timestamp)`,
+                [cod_usuario_empresa, servico_cod, dataAgendamento.toISOString(), data_hora_fim_obj.toISOString()]
+            );
+            const sobrepostosServicoCount = parseInt(agendamentosServicoResult.rows[0].count, 10);
+            if (sobrepostosServicoCount >= capacidadeServico) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ msg: `Limite de capacidade para o serviço "${servicoInfo.nome_servico}" atingido (${capacidadeServico} simultâneos).` });
+            }
+        } else {
+            // VALIDAÇÃO DE CAPACIDADE GERAL (fallback)
+            const capacidadeGeral = regraDoDia.capacidade_simultanea || 1;
+            const agendamentosGeralResult = await client.query(
+                `SELECT COUNT(cod_agendamento) FROM agendamentos
+                 WHERE cod_usuario_empresa = $1 AND status IN ('agendado', 'em_andamento')
+                 AND (data_hora_inicio, data_hora_fim) OVERLAPS ($2::timestamp, $3::timestamp)`,
+                [cod_usuario_empresa, dataAgendamento.toISOString(), data_hora_fim_obj.toISOString()]
+            );
+            const sobrepostosGeralCount = parseInt(agendamentosGeralResult.rows[0].count, 10);
+            if (sobrepostosGeralCount >= capacidadeGeral) {
+                await client.query('ROLLBACK');
+                return res.status(409).json({ msg: `Limite de capacidade geral da agenda atingido (${capacidadeGeral} simultâneos).` });
+            }
+        }
+        // FIM DA NOVA VALIDAÇÃO
+
+        // 3. Verificação de conflito original (para o mesmo profissional ou veículo)
+        const data_hora_fim_iso = data_hora_fim_obj.toISOString();
         const { hasConflict, conflictingIds } = await checkAppointmentConflicts(client, cod_usuario_empresa, data_hora_inicio, data_hora_fim_iso, usuario_responsavel_cod, veiculo_cod);
         if (hasConflict) {
             await client.query('ROLLBACK');
-            return res.status(409).json({ msg: `Conflito de agendamento detectado! (IDs: ${conflictingIds.join(', ')})`});
+            // MENSAGEM MAIS CLARA
+            return res.status(409).json({ 
+                msg: `Este profissional ou veículo já está agendado em um horário conflitante.`
+            });
         }
 
-        // Se tudo estiver OK, o agendamento é criado.
+        // 4. Se tudo estiver OK, criar o agendamento
         const result = await client.query(
             `INSERT INTO agendamentos (cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod, data_hora_inicio, data_hora_fim, duracao_minutos, preco_total, status, tipo_agendamento, forma_pagamento, observacoes_agendamento, cod_usuario_empresa) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
             [cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod, data_hora_inicio, data_hora_fim_iso, duracao_minutos, preco_total, status, tipo_agendamento, forma_pagamento, observacoes_agendamento, cod_usuario_empresa]
@@ -202,6 +242,132 @@ router.post('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendent
     } catch (err) {
         await client.query('ROLLBACK');
         console.error('Erro ao criar agendamento:', err.message, err.stack);
+        res.status(500).send('Server Error');
+    } finally {
+        client.release();
+    }
+});
+
+// =============================================================================
+// ROTA POST /recorrentes (Criar Agendamentos Recorrentes) - CÓDIGO ATUALIZADO
+// =============================================================================
+router.post('/recorrentes', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente']), async (req, res) => {
+    const { agendamento, recorrencia } = req.body; // agendamento: dados do 1º evento; recorrencia: {frequencia, intervalo, data_fim}
+    const { cod_usuario_empresa } = req.user;
+    
+    const {
+        cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod,
+        data_hora_inicio, duracao_minutos, preco_total, status, tipo_agendamento,
+        forma_pagamento, observacoes_agendamento
+    } = agendamento;
+    
+    const { frequencia, intervalo, data_fim } = recorrencia;
+    
+    const client = await pool.connect();
+    try {
+        await client.query('BEGIN');
+
+        // 1. Buscar todas as regras da agenda da empresa de uma só vez para otimizar
+        const regrasResult = await client.query("SELECT * FROM configuracoes_agenda WHERE cod_usuario_empresa = $1 AND ativo = true", [cod_usuario_empresa]);
+        const regras = regrasResult.rows;
+
+        let agendamentosCriados = [];
+        let agendamentosIgnorados = []; // Informa ao usuário quais datas falharam e por quê
+        let dataAtual = moment.tz(data_hora_inicio, "America/Sao_Paulo");
+        const dataFimRecorrencia = moment.tz(data_fim, "America/Sao_Paulo").endOf('day');
+
+        while (dataAtual.isBefore(dataFimRecorrencia)) {
+            const data_hora_fim_obj = dataAtual.clone().add(duracao_minutos, 'minutes');
+            const diaDaSemana = dataAtual.day();
+            const diaFormatado = dataAtual.format('YYYY-MM-DD');
+            let motivoIgnorado = null;
+
+            // Busca detalhes do serviço (poderia ser feito fora do loop se o serviço for sempre o mesmo)
+            const servicoResult = await client.query("SELECT nome_servico, capacidade_simultanea FROM servicos WHERE cod_servico = $1", [servico_cod]);
+            const servicoInfo = servicoResult.rows[0];
+
+            // 1. Validação de Feriado/Bloqueio
+            const regraBloqueio = regras.find(r => r.tipo_regra === 'feriado' && r.ativo && moment(r.data_especifica).format('YYYY-MM-DD') === diaFormatado);
+            if (regraBloqueio) {
+                motivoIgnorado = `Dia bloqueado: ${regraBloqueio.descricao || 'Feriado'}`;
+            }
+
+            // 2. Validação de Horário de Funcionamento e Capacidade
+            if (!motivoIgnorado) {
+                const regraDoDia = regras.find(r => r.tipo_regra === 'horario_trabalho' && r.dia_semana === diaDaSemana && r.ativo);
+                if (regraDoDia) {
+                    const horaInicioTrabalho = moment.tz(`${diaFormatado} ${regraDoDia.hora_inicio}`, "America/Sao_Paulo");
+                    const horaFimTrabalho = moment.tz(`${diaFormatado} ${regraDoDia.hora_fim}`, "America/Sao_Paulo");
+                    if (dataAtual.isBefore(horaInicioTrabalho) || data_hora_fim_obj.isAfter(horaFimTrabalho)) {
+                        motivoIgnorado = `Fora do horário de expediente (${regraDoDia.hora_inicio} - ${regraDoDia.hora_fim})`;
+                    }
+                } else {
+                    motivoIgnorado = `Sem expediente configurado para ${dataAtual.format('dddd')}`;
+                }
+            }
+
+            // 2.1 Validação de Intervalo de Almoço/Pausa
+            if (!motivoIgnorado) {
+                const regraPausa = regras.find(r => r.tipo_regra === 'intervalo_almoco' && r.dia_semana === diaDaSemana && r.ativo);
+                if (regraPausa) {
+                    const horaInicioPausa = moment.tz(`${diaFormatado} ${regraPausa.hora_inicio}`, "America/Sao_Paulo");
+                    const horaFimPausa = moment.tz(`${diaFormatado} ${regraPausa.hora_fim}`, "America/Sao_Paulo");
+                    if (dataAtual.isBefore(horaFimPausa) && data_hora_fim_obj.isAfter(horaInicioPausa)) {
+                        motivoIgnorado = `Conflito com intervalo de pausa (${regraPausa.hora_inicio} - ${regraPausa.hora_fim})`;
+                    } else {
+                        // 3. Validação de Capacidade (Específica ou Geral)
+                        if (servicoInfo && servicoInfo.capacidade_simultanea > 0) {
+                            const capacidadeServico = servicoInfo.capacidade_simultanea;
+                            const agendamentosServicoResult = await client.query(
+                                `SELECT COUNT(cod_agendamento) FROM agendamentos WHERE cod_usuario_empresa = $1 AND servico_cod = $2 AND status IN ('agendado', 'em_andamento') AND (data_hora_inicio, data_hora_fim) OVERLAPS ($3::timestamp, $4::timestamp)`,
+                                [cod_usuario_empresa, servico_cod, dataAtual.toISOString(), data_hora_fim_obj.toISOString()]
+                            );
+                            if (parseInt(agendamentosServicoResult.rows[0].count, 10) >= capacidadeServico) {
+                                motivoIgnorado = `Limite do serviço "${servicoInfo.nome_servico}" (${capacidadeServico}) atingido`;
+                            }
+                        } else {
+                            const capacidadeGeral = regraDoDia.capacidade_simultanea || 1;
+                            const agendamentosGeralResult = await client.query(
+                                `SELECT COUNT(cod_agendamento) FROM agendamentos WHERE cod_usuario_empresa = $1 AND status IN ('agendado', 'em_andamento') AND (data_hora_inicio, data_hora_fim) OVERLAPS ($2::timestamp, $3::timestamp)`,
+                                [cod_usuario_empresa, dataAtual.toISOString(), data_hora_fim_obj.toISOString()]
+                            );
+                            if (parseInt(agendamentosGeralResult.rows[0].count, 10) >= capacidadeGeral) {
+                                motivoIgnorado = `Limite geral da agenda (${capacidadeGeral}) atingido`;
+                            }
+                        }
+                    }
+                }
+            }
+
+            // 4. Validação de Conflito de Profissional/Veículo
+            if (!motivoIgnorado) {
+                const { hasConflict } = await checkAppointmentConflicts(client, cod_usuario_empresa, dataAtual.toISOString(), data_hora_fim_obj.toISOString(), usuario_responsavel_cod, veiculo_cod);
+                if (hasConflict) {
+                    motivoIgnorado = 'Conflito com outro agendamento do profissional/veículo';
+                }
+            }
+
+            // 5. Inserir ou Ignorar
+            if (motivoIgnorado) {
+                agendamentosIgnorados.push({ data: dataAtual.format('DD/MM/YYYY HH:mm'), motivo: motivoIgnorado });
+            } else {
+                const result = await client.query(
+                    `INSERT INTO agendamentos (cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod, data_hora_inicio, data_hora_fim, duracao_minutos, preco_total, status, tipo_agendamento, forma_pagamento, observacoes_agendamento, cod_usuario_empresa) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
+                    [cliente_cod, servico_cod, veiculo_cod, usuario_responsavel_cod, dataAtual.toISOString(), data_hora_fim_obj.toISOString(), duracao_minutos, preco_total, status, tipo_agendamento, forma_pagamento, observacoes_agendamento, cod_usuario_empresa]
+                );
+                agendamentosCriados.push(result.rows[0]);
+            }
+
+            // Avança para a próxima data baseada na frequência
+            dataAtual.add(intervalo, frequencia.replace('diaria', 'days').replace('semanal', 'weeks').replace('mensal', 'months'));
+        }
+
+        await client.query('COMMIT');
+        res.status(201).json({ msg: `${agendamentosCriados.length} agendamentos recorrentes criados com sucesso.`, agendamentos: agendamentosCriados, agendamentosIgnorados });
+
+    } catch (err) {
+        await client.query('ROLLBACK');
+        console.error('Erro ao criar agendamento recorrente:', err.message, err.stack);
         res.status(500).send('Server Error');
     } finally {
         client.release();
