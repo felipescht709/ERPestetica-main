@@ -1,17 +1,18 @@
 // frontend/src/components/AppointmentModal.jsx
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom'; // 1. Importar o useNavigate
 import api from '../utils/api';
 import moment from 'moment';
 import { Spinner } from 'react-bootstrap';
 import { toast } from 'react-toastify';
 import ConfirmationModal from './ConfirmationModal'; // Importar o novo modal
+import Select from 'react-select';
 
 const AppointmentModal = ({ appointment, onClose, onSave }) => {
     // 1. Define uma função que retorna um estado inicial limpo e previsível.
     const getInitialState = () => ({
         cod_agendamento: null,
         cliente_cod: '',
-        servico_cod: '',
         veiculo_cod: '',
         usuario_responsavel_cod: '',
         // Usa a data/hora do slot clicado, ou a data/hora atual como fallback.
@@ -38,7 +39,8 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
     };
 
     const [clientes, setClientes] = useState([]);
-    const [servicos, setServicos] = useState([]);
+    const [allServices, setAllServices] = useState([]); // Guarda todos os serviços disponíveis
+    const [selectedServices, setSelectedServices] = useState([]);
     const [funcionarios, setFuncionarios] = useState([]);
     // ESTADOS APRIMORADOS:
     const [clientVehicles, setClientVehicles] = useState([]); // Armazena apenas os veículos do cliente selecionado
@@ -47,13 +49,26 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
     const [asyncState, setAsyncState] = useState({
         isSubmitting: false,
         isDeleting: false,
+        isSendingConfirmation: false, // Novo estado de loading
         submissionError: null,
         isLoadingData: true,
         dataError: null,
     });
+    const [showConfirmSendModal, setShowConfirmSendModal] = useState(false); // Para confirmar o envio
     const [showConfirmModal, setShowConfirmModal] = useState(false);
 
     const isEditing = !!appointment?.id;
+    const navigate = useNavigate(); // 3. Inicializar o hook
+
+    useEffect(() => {
+    if (selectedServices && selectedServices.length > 0) {
+        const newTotalDuration = selectedServices.reduce((total, s) => total + s.duracao_minutos, 0);
+        const newTotalPrice = selectedServices.reduce((total, s) => total + parseFloat(s.preco), 0);
+        setFormData(prev => ({ ...prev, duracao_minutos: newTotalDuration, preco_total: newTotalPrice }));
+    } else {
+        setFormData(prev => ({ ...prev, duracao_minutos: 0, preco_total: 0 }));
+    }
+}, [selectedServices]);
 
     // Fetch de dados para dropdowns
     useEffect(() => {
@@ -71,7 +86,7 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                 ]);
 
                 setClientes(clientsRes);
-                setServicos(servicesRes);
+                setAllServices(servicesRes);
                 setFuncionarios(usersRes.filter(u => ['tecnico', 'atendente', 'gerente', 'admin'].includes(u.role)));
 
             } catch (err) {
@@ -86,29 +101,39 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
 
     // 2. Centraliza TODA a lógica de popular/resetar o formulário neste useEffect.
     //    Ele agora reage corretamente a qualquer mudança no 'appointment'.
-    useEffect(() => {
-        if (appointment?.id) { // Modo de EDIÇÃO: um agendamento existente foi clicado.
-            setFormData({
-                cod_agendamento: appointment.id,
-                cliente_cod: appointment.resource?.cliente_cod || '',
-                servico_cod: appointment.resource?.servico_cod || '',
-                veiculo_cod: appointment.resource?.veiculo_cod || '',
-                usuario_responsavel_cod: appointment.resource?.usuario_responsavel_cod || '',
-                data: moment(appointment.start).format('YYYY-MM-DD'),
-                hora: moment(appointment.start).format('HH:mm'),
-                duracao_minutos: appointment.resource?.duracao_minutos || moment(appointment.end).diff(moment(appointment.start), 'minutes'),
-                preco_total: appointment.resource?.preco_total || '',
-                status: appointment.resource?.status || 'agendado',
-                tipo_agendamento: appointment.resource?.tipo_agendamento || 'presencial',
-                forma_pagamento: appointment.resource?.forma_pagamento || '',
-                observacoes_agendamento: appointment.resource?.observacoes_agendamento || '',
+   useEffect(() => {
+    if (isEditing && appointment?.resource && allServices.length > 0) {
+        setFormData({
+            cod_agendamento: appointment.id,
+            cliente_cod: appointment.resource.cliente_cod || '',
+            veiculo_cod: appointment.resource.veiculo_cod || '',
+            usuario_responsavel_cod: appointment.resource.usuario_responsavel_cod || '',
+            data: moment(appointment.start).format('YYYY-MM-DD'),
+            hora: moment(appointment.start).format('HH:mm'),
+            duracao_minutos: appointment.resource.duracao_minutos || 0,
+            preco_total: appointment.resource.preco_total || 0,
+            status: appointment.resource.status || 'agendado',
+            tipo_agendamento: appointment.resource.tipo_agendamento || 'presencial',
+            forma_pagamento: appointment.resource.forma_pagamento || '',
+            observacoes_agendamento: appointment.resource.observacoes_agendamento || '',
+        });
+
+        if (appointment.resource.servicos_agendados) {
+            const servicesFromEvent = appointment.resource.servicos_agendados.map(s => {
+                const fullService = allServices.find(as => as.cod_servico === s.cod_servico);
+                return {
+                    value: s.cod_servico,
+                    label: `${s.nome_servico} (R$ ${Number(fullService.preco).toFixed(2)})`,
+                    ...fullService
+                };
             });
-        setIsRecurrent(false); // Garante que a recorrência esteja desativada ao editar.
-        } else { // Modo de CRIAÇÃO: um slot vazio ou o botão "Novo Agendamento" foi clicado.
-            // Garante que o formulário seja completamente resetado para um novo agendamento, usando a data do slot se disponível.
-            setFormData(getInitialState());
+            setSelectedServices(servicesFromEvent);
         }
-    }, [appointment]); 
+    } else {
+        setFormData(getInitialState());
+        setSelectedServices([]);
+    }
+}, [appointment, isEditing, allServices]);
 
     // EFEITO INTELIGENTE: Busca veículos apenas quando o cliente muda.
     useEffect(() => {
@@ -135,28 +160,21 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
 
     const handleChange = (e) => {
         const { name, value } = e.target;
-        let newValue = value;
-
-        // Se o campo for servico_cod e o serviço for selecionado, atualiza preço e duração
-        if (name === 'servico_cod') {
-            const selectedService = servicos.find(s => s.cod_servico === Number(value));
-            if (selectedService) {
-                setFormData(prev => ({
-                    ...prev,
-                    servico_cod: newValue,
-                    preco_total: selectedService.preco, // Preço do serviço
-                    duracao_minutos: selectedService.duracao_minutos // Duração do serviço
-                }));
-                return; // Já atualizou o estado, sai da função
-            }
-        }
-        setFormData(prev => ({ ...prev, [name]: newValue }));
+        setFormData(prev => ({ ...prev, [name]: value }));
     };
 
     const validateForm = useCallback(() => {
-        const { cliente_cod, servico_cod, data, hora, duracao_minutos, preco_total } = formData;
-        if (!cliente_cod || !servico_cod || !data || !hora || !duracao_minutos || !preco_total) {
-            setAsyncState(prev => ({ ...prev, submissionError: 'Por favor, preencha todos os campos obrigatórios (Cliente, Serviço, Data, Hora, Duração, Preço).' }));
+        const { cliente_cod, data, hora, duracao_minutos, preco_total } = formData;
+        if (!cliente_cod || !data || !hora) {
+            setAsyncState(prev => ({ ...prev, submissionError: 'Cliente, Data e Hora são obrigatórios.' }));
+            return false;
+        }
+        if (selectedServices.length === 0) {
+            setAsyncState(prev => ({ ...prev, submissionError: 'Selecione pelo menos um serviço.' }));
+            return false;
+        }
+        if (!duracao_minutos || !preco_total) {
+            setAsyncState(prev => ({ ...prev, submissionError: 'Preço e duração devem ser calculados.' }));
             return false;
         }
         if (Number(duracao_minutos) <= 0) {
@@ -169,7 +187,7 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
         }
         setAsyncState(prev => ({ ...prev, submissionError: null }));
         return true;
-    }, [formData]);
+    }, [formData, selectedServices]);
 
     const handleDelete = () => {
         if (!isEditing || !formData.cod_agendamento) return;
@@ -194,32 +212,57 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
         }
     };
 
+    const handleSendConfirmation = async (canal) => {
+        if (!isEditing) return;
+        setShowConfirmSendModal(false); // Fecha o modal de confirmação de envio
+        setAsyncState(prev => ({ ...prev, isSendingConfirmation: true, submissionError: null }));
+
+        try {
+            const response = await api(`/agendamentos/${formData.cod_agendamento}/enviar-confirmacao`, {
+                method: 'POST',
+                body: JSON.stringify({ canal }),
+            });
+            toast.success(response.msg || `Solicitação de confirmação enviada por ${canal}.`);
+            // Opcional: fechar o modal principal após o envio bem-sucedido
+            // onClose(); 
+        } catch (err) {
+            console.error('Erro ao enviar confirmação:', err);
+            const errorMessage = err.msg || `Não foi possível enviar a confirmação por ${canal}.`;
+            setAsyncState(prev => ({ ...prev, submissionError: errorMessage }));
+            toast.error(errorMessage);
+        } finally {
+            setAsyncState(prev => ({ ...prev, isSendingConfirmation: false }));
+        }
+    };
+
+
     const handleSubmit = async (e) => {
-        e.preventDefault();
-        if (!validateForm()) return;
+    e.preventDefault();
 
-        setAsyncState(prev => ({ ...prev, isSubmitting: true, submissionError: null }));
+    if (selectedServices.length === 0) {
+        toast.error('É necessário selecionar pelo menos um serviço.');
+        return;
+    }
 
-        // Preparar os dados para o backend
-        const dataToSubmit = { ...formData };
-        dataToSubmit.cliente_cod = Number(dataToSubmit.cliente_cod);
-        dataToSubmit.servico_cod = Number(dataToSubmit.servico_cod);
-        dataToSubmit.veiculo_cod = dataToSubmit.veiculo_cod ? Number(dataToSubmit.veiculo_cod) : null;
-        dataToSubmit.usuario_responsavel_cod = dataToSubmit.usuario_responsavel_cod ? Number(dataToSubmit.usuario_responsavel_cod) : null;
-        dataToSubmit.preco_total = Number(dataToSubmit.preco_total);
-        dataToSubmit.duracao_minutos = Number(dataToSubmit.duracao_minutos);
+    setAsyncState(prev => ({ ...prev, isSubmitting: true, submissionError: null }));
 
-        // Combinar data e hora para data_hora_inicio
-        dataToSubmit.data_hora_inicio = moment(`${dataToSubmit.data}T${dataToSubmit.hora}`).toISOString();
-        
-        // Calcular data_hora_fim
-        dataToSubmit.data_hora_fim = moment(dataToSubmit.data_hora_inicio).add(dataToSubmit.duracao_minutos, 'minutes').toISOString();
-
-        // Remover campos que não vão para o backend ou são calculados
-        delete dataToSubmit.data;
-        delete dataToSubmit.hora;
-        delete dataToSubmit.cod_agendamento; // Se for novo, não precisa enviar; se for edição, o ID já está na URL
-
+    // Monta o payload para o backend
+    const dataToSubmit = {
+        ...formData,
+        cliente_cod: Number(formData.cliente_cod),
+        veiculo_cod: formData.veiculo_cod ? Number(formData.veiculo_cod) : null,
+        usuario_responsavel_cod: formData.usuario_responsavel_cod ? Number(formData.usuario_responsavel_cod) : null,
+        data_hora_inicio: moment(`${formData.data}T${formData.hora}`).toISOString(),
+        // NOVO: O payload agora contém o array 'servicos'
+        servicos: selectedServices.map(s => ({
+            cod_servico: s.cod_servico,
+            preco: parseFloat(s.preco),
+            duracao_minutos: s.duracao_minutos
+        }))
+    };
+    // Remove campos desnecessários
+    delete dataToSubmit.data;
+    delete dataToSubmit.hora;
         try {
             let response;
             // Se for recorrente, chama a nova rota. A recorrência só está disponível para novos agendamentos.
@@ -301,6 +344,20 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                 confirmText="Sim, Cancelar"
                 isDestructive={true}
             />
+            {/* Modal para confirmar o envio da mensagem */}
+            <ConfirmationModal
+                show={showConfirmSendModal}
+                onClose={() => setShowConfirmSendModal(false)}
+                title="Enviar Confirmação"
+                message="Qual canal você deseja usar para enviar a solicitação de confirmação ao cliente?"
+                isDestructive={false}
+                customActions={() => (
+                    <div className="d-flex justify-content-end gap-2">
+                        <button className="button-secondary" onClick={() => handleSendConfirmation('email')}>E-mail</button>
+                        <button className="button-primary" onClick={() => handleSendConfirmation('whatsapp')}>WhatsApp</button>
+                    </div>
+                )}
+            />
 
             <div className="modal-content">
                 <h3>{isEditing ? 'Editar Agendamento' : 'Novo Agendamento'}</h3>
@@ -351,24 +408,21 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                     </div>
 
                     <div className="form-row">
-                        <div className="form-group half-width">
-                            <label htmlFor="servico_cod">Serviço:</label>
-                            <select
-                                name="servico_cod"
-                                id="servico_cod"
-                                value={formData.servico_cod}
-                                onChange={handleChange}
-                                required
-                                className="input-field"
-                            >
-                                <option value="">Selecione um serviço</option>
-                                {servicos.map((serv, index) => (
-                                    <option key={`${serv.cod_servico}-${index}`} value={serv.cod_servico}>
-                                        {serv.nome_servico} (R$ {Number(serv.preco).toFixed(2).replace('.', ',')})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
+                        <div className="form-group">
+                            <label htmlFor="servicos">Serviços:</label>
+                                <Select
+                                    id="servicos"
+                                    isMulti
+                                    isClearable
+                                    options={allServices.map(s => ({ value: s.cod_servico, label: `${s.nome_servico} (R$ ${Number(s.preco).toFixed(2)})`, ...s }))}
+                                    value={selectedServices}
+                                    onChange={(options) => setSelectedServices(options || [])}
+                                    placeholder="Selecione um ou mais serviços"
+                                    noOptionsMessage={() => "Nenhum serviço encontrado"}
+                                    className="react-select-container"
+                                    classNamePrefix="react-select"
+                                />
+                            </div>
                         <div className="form-group half-width">
                             <label htmlFor="usuario_responsavel_cod">Responsável:</label>
                             <select
@@ -414,19 +468,16 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                             />
                         </div>
                     </div>
-
                     <div className="form-row">
-                         <div className="form-group half-width">
-                            <label htmlFor="duracao_minutos">Duração (min):</label>
+                        <div className="form-group half-width">
+                            <label htmlFor="duracao_minutos">Duração Total (min):</label>
                             <input
                                 type="number"
                                 name="duracao_minutos"
                                 id="duracao_minutos"
                                 value={formData.duracao_minutos}
-                                onChange={handleChange}
-                                required
-                                min="1"
-                                className="input-field"
+                                readOnly
+                                className="input-field-disabled"
                             />
                         </div>
                         <div className="form-group half-width">
@@ -435,16 +486,12 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                                 type="number"
                                 name="preco_total"
                                 id="preco_total"
-                                value={formData.preco_total}
-                                onChange={handleChange}
-                                required
-                                step="0.01"
-                                min="0"
-                                className="input-field"
+                                value={Number(formData.preco_total).toFixed(2)}
+                                readOnly
+                                className="input-field-disabled"
                             />
                         </div>
                     </div>
-
                     <div className="form-row">
                         <div className="form-group half-width">
                             <label htmlFor="status">Status:</label>
@@ -460,6 +507,7 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                                 <option value="concluido">Concluído</option>
                                 <option value="cancelado">Cancelado</option>
                                 <option value="pendente">Pendente</option>
+                                <option value="confirmado_cliente">Confirmado pelo Cliente</option>
                             </select>
                         </div>
                         <div className="form-group half-width">
@@ -547,30 +595,41 @@ const AppointmentModal = ({ appointment, onClose, onSave }) => {
                     )}
 
                     <div className="modal-actions">
-                                            {isEditing && (
-                                                <button
-                                                    type="button"
-                                                    className="button-danger me-auto" // 'me-auto' alinha este botão à esquerda
-                                                    onClick={handleDelete}
-                                                    disabled={asyncState.isDeleting || asyncState.isSubmitting}
-                                                >
-                                                    {asyncState.isDeleting ? (
-                                                        <><Spinner as="span" animation="border" size="sm" /> Cancelando...</>
-                                                    ) : 'Cancelar Agendamento'}
-                                                </button>
-                                            )}
-                                            <button type="button" className="button-secondary" onClick={onClose} disabled={asyncState.isSubmitting || asyncState.isDeleting}>
-                                                Cancelar
-                                            </button>
-                                            <button type="submit" className="button-primary" disabled={asyncState.isSubmitting || asyncState.isDeleting}>
-                                                {asyncState.isSubmitting ? (
-                                                    <>
-                                                        <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
-                                                        <span className="ms-2">Salvando...</span>
-                                                    </>
-                                                ) : 'Salvar Agendamento'}
-                                            </button>
-                                        </div>
+                        {isEditing && (
+                            <button
+                                type="button"
+                                className="button-danger me-auto" // 'me-auto' alinha este botão à esquerda
+                                onClick={handleDelete}
+                                disabled={asyncState.isDeleting || asyncState.isSubmitting || isRecurrent}
+                                title={isRecurrent ? "Não é possível cancelar um agendamento recorrente por aqui" : "Cancelar Agendamento"}
+                            >
+                                {asyncState.isDeleting ? (
+                                    <><Spinner as="span" animation="border" size="sm" /> Cancelando...</>
+                                ) : 'Cancelar Agendamento'}
+                            </button>
+                        )}
+                        {isEditing && (
+                            <button
+                                type="button"
+                                className="button-info" // Use uma classe de cor informativa
+                                onClick={() => setShowConfirmSendModal(true)}
+                                disabled={asyncState.isSendingConfirmation || asyncState.isSubmitting}
+                            >
+                                {asyncState.isSendingConfirmation ? 'Enviando...' : 'Enviar Confirmação'}
+                            </button>
+                        )}
+                        <button type="button" className="button-secondary" onClick={onClose} disabled={asyncState.isSubmitting || asyncState.isDeleting}>
+                            Cancelar
+                        </button>
+                        <button type="submit" className="button-primary" disabled={asyncState.isSubmitting || asyncState.isDeleting}>
+                            {asyncState.isSubmitting ? (
+                                <>
+                                    <Spinner as="span" animation="border" size="sm" role="status" aria-hidden="true" />
+                                    <span className="ms-2">Salvando...</span>
+                                </>
+                            ) : 'Salvar Agendamento'}
+                        </button>
+                    </div>
 
                     {asyncState.submissionError && (
                         <div className="alert error mt-3">{asyncState.submissionError}</div>

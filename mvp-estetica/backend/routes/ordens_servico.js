@@ -66,10 +66,10 @@ router.get('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente
 router.get('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente', 'tecnico']), async (req, res) => {
     try {
         const { id } = req.params;
-        const { cod_usuario_empresa } = req.user;
-
-        // Iniciar transação para buscar dados da OS e seus itens
-        await pool.query('BEGIN');
+        const { cod_usuario_empresa } = req.user; // Iniciar transação para buscar dados da OS e seus itens
+        const client = await pool.connect();
+        try {
+            await client.query('BEGIN');
 
         const osQuery = `
             SELECT
@@ -83,11 +83,11 @@ router.get('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atende
             LEFT JOIN veiculos v ON os.cod_veiculo = v.cod_veiculo
             LEFT JOIN usuarios u ON os.cod_funcionario_responsavel = u.cod_usuario
             WHERE os.cod_ordem_servico = $1 AND os.cod_usuario_empresa = $2;
-        `;
-        const osResult = await pool.query(osQuery, [id, cod_usuario_empresa]);
+        `; // const osResult = await pool.query(osQuery, [id, cod_usuario_empresa]);
+            const osResult = await client.query(osQuery, [id, cod_usuario_empresa]);
 
         if (osResult.rows.length === 0) {
-            await pool.query('ROLLBACK');
+                await client.query('ROLLBACK');
             return res.status(404).json({ msg: 'Ordem de Serviço não encontrada.' });
         }
 
@@ -109,16 +109,51 @@ router.get('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atende
             LEFT JOIN servicos s ON ios.cod_servico = s.cod_servico
             LEFT JOIN produtos_estoque pe ON ios.cod_produto = pe.cod_produto
             WHERE ios.cod_ordem_servico = $1 AND ios.cod_usuario_empresa = $2;
+        `; // const itensResult = await pool.query(itensQuery, [id, cod_usuario_empresa]);
+            const itensResult = await client.query(itensQuery, [id, cod_usuario_empresa]);
+
+            // NOVO: Buscar os itens do checklist
+            const checklistQuery = `
+            SELECT * FROM os_checklist_itens
+            WHERE cod_ordem_servico = $1 AND cod_usuario_empresa = $2
+            ORDER BY cod_item_checklist ASC;
         `;
-        const itensResult = await pool.query(itensQuery, [id, cod_usuario_empresa]);
+            const checklistResult = await client.query(checklistQuery, [id, cod_usuario_empresa]);
 
-        await pool.query('COMMIT');
+            await client.query('COMMIT');
 
-        res.json({ ...os, itens: itensResult.rows });
+            res.json({ ...os, itens: itensResult.rows, checklist: checklistResult.rows });
+
+        } catch (err) {
+            await client.query('ROLLBACK');
+        console.error('Erro ao buscar Ordem de Serviço por ID:', err.message);
+        res.status(500).send('Server Error');
+        } finally {
+            client.release();
+        }
+});
+
+// GET Ordem de Serviço by cod_agendamento
+router.get('/por-agendamento/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente', 'tecnico']), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { cod_usuario_empresa } = req.user;
+
+        const osQuery = `
+            SELECT cod_ordem_servico
+            FROM ordens_servico
+            WHERE cod_agendamento = $1 AND cod_usuario_empresa = $2;
+        `;
+        const osResult = await pool.query(osQuery, [id, cod_usuario_empresa]);
+
+        if (osResult.rows.length === 0) {
+            return res.status(404).json({ msg: 'Nenhuma Ordem de Serviço encontrada para este agendamento.' });
+        }
+
+        res.json(osResult.rows[0]);
 
     } catch (err) {
-        await pool.query('ROLLBACK');
-        console.error('Erro ao buscar Ordem de Serviço por ID:', err.message);
+        console.error('Erro ao buscar Ordem de Serviço por agendamento:', err.message);
         res.status(500).send('Server Error');
     }
 });
@@ -207,12 +242,39 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atende
     const { cod_usuario_empresa } = req.user;
     const {
         cod_cliente, cod_veiculo, data_conclusao_prevista, data_conclusao_real, status_os,
-        observacoes, cod_funcionario_responsavel, itens // Itens devem ser manipulados separadamente (PUT/DELETE/POST em itens_ordem_servico)
+        observacoes, cod_funcionario_responsavel, checklist // NOVO: Recebe o checklist
     } = req.body;
 
+    const client = await pool.connect();
     try {
-        await pool.query('BEGIN');
+        await client.query('BEGIN');
 
+        // NOVO: Validação do Checklist antes de iniciar o serviço
+        if (status_os === 'Em Andamento') {
+            const checklistPendenteResult = await client.query(
+                `SELECT COUNT(*) FROM os_checklist_itens WHERE cod_ordem_servico = $1 AND concluido = FALSE`,
+                [id]
+            );
+            if (parseInt(checklistPendenteResult.rows[0].count, 10) > 0) {
+                await client.query('ROLLBACK');
+                return res.status(400).json({ msg: 'Todos os itens do checklist de verificação inicial devem ser concluídos antes de iniciar o serviço.' });
+            }
+        }
+
+        // NOVO: Atualizar os itens do checklist se eles forem enviados
+        if (Array.isArray(checklist)) {
+            for (const item of checklist) {
+                if (item.cod_item_checklist) {
+                    await client.query(
+                        `UPDATE os_checklist_itens SET concluido = $1, observacoes = $2
+                         WHERE cod_item_checklist = $3 AND cod_ordem_servico = $4 AND cod_usuario_empresa = $5`,
+                        [item.concluido, item.observacoes, item.cod_item_checklist, id, cod_usuario_empresa]
+                    );
+                }
+            }
+        }
+
+        // Lógica original de atualização da OS
         // Primeiramente, obtenha os totais atuais dos itens para recalcular valor_total_os
         // OU, recalcule com base nos novos itens se eles forem enviados para substituição total.
         // Por simplicidade aqui, vamos apenas atualizar os campos principais da OS.
@@ -240,27 +302,29 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente', 'atende
         query = query.replace(/,\s*$/, ""); // Remove a vírgula extra no final
         
         if (params.length === 0) {
-            await pool.query('ROLLBACK');
+            await client.query('ROLLBACK');
             return res.status(400).json({ msg: 'Nenhum campo para atualizar fornecido para a OS principal.' });
         }
 
         query += ` WHERE cod_ordem_servico = $${i++} AND cod_usuario_empresa = $${i++} RETURNING *`;
         params.push(id, cod_usuario_empresa);
 
-        const updatedOS = await pool.query(query, params);
+        const updatedOS = await client.query(query, params);
         
         if (updatedOS.rows.length === 0) {
-            await pool.query('ROLLBACK');
+            await client.query('ROLLBACK');
             return res.status(404).json({ msg: 'Ordem de Serviço não encontrada.' });
         }
 
-        await pool.query('COMMIT');
+        await client.query('COMMIT');
         res.json(updatedOS.rows[0]);
 
     } catch (err) {
-        await pool.query('ROLLBACK');
+        await client.query('ROLLBACK');
         console.error('Erro ao atualizar Ordem de Serviço:', err.message);
         res.status(500).send('Server Error');
+    } finally {
+        client.release();
     }
 });
 

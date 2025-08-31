@@ -1,8 +1,8 @@
-// backend/routes/despesas.js
+// backend/routes/despesas.js (VERSÃO CORRIGIDA)
 const express = require('express');
 const router = express.Router();
 const pool = require('../banco');
-const { authenticateToken, authorizeRole } = require('../middleware/auth'); // Importa os middlewares
+const { authenticateToken, authorizeRole } = require('../middleware/auth');
 
 // GET all despesas (multi-tenant)
 router.get('/', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
@@ -12,8 +12,8 @@ router.get('/', authenticateToken, authorizeRole(['admin', 'gerente']), async (r
 
         let query = `
             SELECT * FROM despesas
-            WHERE cod_usuario_empresa = $1 AND ativo = TRUE
-        `;
+            WHERE cod_usuario_empresa = $1
+        `; // REMOVIDO: "AND ativo = TRUE"
         const params = [cod_usuario_empresa];
         let paramIndex = 2;
 
@@ -36,7 +36,8 @@ router.get('/', authenticateToken, authorizeRole(['admin', 'gerente']), async (r
         res.json(result.rows);
     } catch (err) {
         console.error('Erro ao buscar despesas:', err.message);
-        res.status(500).send('Server Error');
+        // CORRIGIDO: Retorna JSON no erro
+        res.status(500).json({ msg: 'Erro ao buscar despesas.', error: err.message });
     }
 });
 
@@ -46,7 +47,7 @@ router.get('/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async
         const { id } = req.params;
         const { cod_usuario_empresa } = req.user;
         const result = await pool.query(
-            `SELECT * FROM despesas WHERE cod_despesa = $1 AND cod_usuario_empresa = $2 AND ativo = TRUE`,
+            `SELECT * FROM despesas WHERE cod_despesa = $1 AND cod_usuario_empresa = $2`, // REMOVIDO: "AND ativo = TRUE"
             [id, cod_usuario_empresa]
         );
         if (result.rows.length === 0) {
@@ -55,11 +56,12 @@ router.get('/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async
         res.json(result.rows[0]);
     } catch (err) {
         console.error('Erro ao buscar despesa por ID:', err.message);
-        res.status(500).send('Server Error');
+        // CORRIGIDO: Retorna JSON no erro
+        res.status(500).json({ msg: 'Erro ao buscar despesa por ID.', error: err.message });
     }
 });
 
-// POST a new despesa (multi-tenant)
+// POST a new despesa (multi-tenant) - (Sem alterações na lógica principal)
 router.post('/', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
     const {
         descricao, valor, data_vencimento, data_pagamento, status_pagamento, tipo_despesa, observacoes
@@ -82,7 +84,8 @@ router.post('/', authenticateToken, authorizeRole(['admin', 'gerente']), async (
         res.status(201).json(result.rows[0]);
     } catch (err) {
         console.error('Erro ao adicionar despesa:', err.message);
-        res.status(500).send('Server Error');
+        // CORRIGIDO: Retorna JSON no erro
+        res.status(500).json({ msg: 'Erro ao adicionar despesa.', error: err.message });
     }
 });
 
@@ -91,8 +94,8 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async
     const { id } = req.params;
     const { cod_usuario_empresa } = req.user;
     const {
-        descricao, valor, data_vencimento, data_pagamento, status_pagamento, tipo_despesa, observacoes, ativo
-    } = req.body;
+        descricao, valor, data_vencimento, data_pagamento, status_pagamento, tipo_despesa, observacoes
+    } = req.body; // REMOVIDO: "ativo" do corpo da requisição
 
     try {
         let query = 'UPDATE despesas SET ';
@@ -106,10 +109,9 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async
         if (status_pagamento !== undefined) { query += `status_pagamento = $${i++}, `; params.push(status_pagamento); }
         if (tipo_despesa !== undefined) { query += `tipo_despesa = $${i++}, `; params.push(tipo_despesa); }
         if (observacoes !== undefined) { query += `observacoes = $${i++}, `; params.push(observacoes); }
-        if (ativo !== undefined) { query += `ativo = $${i++}, `; params.push(ativo); }
+        // REMOVIDO: Lógica de atualização do campo "ativo"
 
-        query += `updated_at = CURRENT_TIMESTAMP `;
-        query = query.replace(/,\s*$/, ""); // Remove a vírgula extra no final
+        query = query.replace(/,\\s*$/, "");
         
         if (params.length === 0) {
             return res.status(400).json({ msg: 'Nenhum campo para atualizar fornecido.' });
@@ -125,28 +127,29 @@ router.put('/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async
         res.json(updatedExpense.rows[0]);
     } catch (err) {
         console.error('Erro ao atualizar despesa:', err.message);
-        res.status(500).send('Server Error');
+        // CORRIGIDO: Retorna JSON no erro
+        res.status(500).json({ msg: 'Erro ao atualizar despesa.', error: err.message });
     }
 });
 
-// DELETE (desativar) uma despesa (multi-tenant)
-// Usamos "soft delete" (ativo = FALSE) em vez de exclusão física
+// DELETE (exclusão física) uma despesa (multi-tenant)
 router.delete('/:id', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
     try {
         const { id } = req.params;
         const { cod_usuario_empresa } = req.user;
         const deletedExpense = await pool.query(
-            `UPDATE despesas SET ativo = FALSE, updated_at = CURRENT_TIMESTAMP 
-             WHERE cod_despesa = $1 AND cod_usuario_empresa = $2 RETURNING *`,
+            // ALTERADO: De "soft delete" (UPDATE) para exclusão física (DELETE)
+            `DELETE FROM despesas WHERE cod_despesa = $1 AND cod_usuario_empresa = $2 RETURNING *`,
             [id, cod_usuario_empresa]
         );
         if (deletedExpense.rows.length === 0) {
-            return res.status(404).json({ msg: 'Despesa não encontrada.' });
+            return res.status(404).json({ msg: 'Despesa não encontrada para exclusão.' });
         }
-        res.json({ msg: 'Despesa desativada com sucesso (removida da visualização ativa).' });
+        res.json({ msg: 'Despesa excluída com sucesso.' });
     } catch (err) {
-        console.error('Erro ao desativar despesa:', err.message);
-        res.status(500).send('Server Error');
+        console.error('Erro ao excluir despesa:', err.message);
+        // CORRIGIDO: Retorna JSON no erro (já estava certo, mas mantido por consistência)
+        res.status(500).json({ msg: 'Erro ao excluir despesa.', error: err.message });
     }
 });
 

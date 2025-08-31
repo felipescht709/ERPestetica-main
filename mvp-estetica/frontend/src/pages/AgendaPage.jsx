@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext, useCallback } from 'react';
 import { Calendar, momentLocalizer } from 'react-big-calendar';
-import moment from 'moment';
+import moment from 'moment-timezone';
 import 'react-big-calendar/lib/css/react-big-calendar.css';
 import 'moment/locale/pt-br'; // Importa a localização em português
 
@@ -45,6 +45,29 @@ localizer.formats = {
         local.format(start, 'HH:mm', culture) + ' – ' + local.format(end, 'HH:mm', culture),
 };
 
+// Função para gerar eventos de bloqueio (almoço, pausas) movida para fora do componente
+const generateBlockerEvents = (rules, viewStart, viewEnd) => {
+    const blockerEvents = [];
+    const intervalRules = rules.filter(r => r.tipo_regra === 'intervalo_almoco' && r.ativo);
+
+    for (let m = moment(viewStart); m.isSameOrBefore(viewEnd); m.add(1, 'days')) {
+        const dayOfWeek = m.day();
+        const ruleForDay = intervalRules.find(r => r.dia_semana === dayOfWeek);
+
+        if (ruleForDay) {
+            const diaFormatado = m.format('YYYY-MM-DD');
+            blockerEvents.push({
+                id: `blocker-${diaFormatado}-${ruleForDay.cod_configuracao}`,
+                title: ruleForDay.descricao || 'Intervalo',
+                start: moment.tz(`${diaFormatado} ${ruleForDay.hora_inicio}`, 'America/Sao_Paulo').toDate(),
+                end: moment.tz(`${diaFormatado} ${ruleForDay.hora_fim}`, 'America/Sao_Paulo').toDate(),
+                isBlocker: true,
+            });
+        }
+    }
+    return blockerEvents;
+};
+
 
 const AgendaPage = () => {
     // Seus estados existentes
@@ -69,6 +92,7 @@ const AgendaPage = () => {
             { value: 'concluido', label: 'Concluído' },
             { value: 'cancelado', label: 'Cancelado' },
             { value: 'pendente', label: 'Pendente' },
+            { value: 'confirmado_cliente', label: 'Confirmado pelo Cliente' },
         ];    
         // NOVO: Callback para aplicar estilos aos eventos do calendário
         const eventPropGetter = useCallback(
@@ -84,6 +108,13 @@ const AgendaPage = () => {
                         }
                     };
                 }
+
+                // Estilo para agendamentos confirmados pelo cliente
+                if (event.status === 'confirmado_cliente') {
+                    return {
+                        style: { backgroundColor: 'var(--purple-600)', borderColor: 'var(--purple-600)' } // Corrigido para usar aspas simples
+                    }
+                }
     
                 // Estilo padrão para agendamentos normais
                 const style = {
@@ -98,29 +129,6 @@ const AgendaPage = () => {
             },
             []
         );
-
-        // Função para gerar eventos de bloqueio (almoço, pausas)
-        const generateBlockerEvents = (rules, viewStart, viewEnd) => {
-            const blockerEvents = [];
-            const intervalRules = rules.filter(r => r.tipo_regra === 'intervalo_almoco' && r.ativo);
-    
-            for (let m = moment(viewStart); m.isSameOrBefore(viewEnd); m.add(1, 'days')) {
-                const dayOfWeek = m.day();
-                const ruleForDay = intervalRules.find(r => r.dia_semana === dayOfWeek);
-    
-                if (ruleForDay) {
-                    const diaFormatado = m.format('YYYY-MM-DD');
-                    blockerEvents.push({
-                        id: `blocker-${diaFormatado}-${ruleForDay.cod_configuracao}`,
-                        title: ruleForDay.descricao || 'Intervalo',
-                        start: moment.tz(`${diaFormatado} ${ruleForDay.hora_inicio}`, "America/Sao_Paulo").toDate(),
-                        end: moment.tz(`${diaFormatado} ${ruleForDay.hora_fim}`, "America/Sao_Paulo").toDate(),
-                        isBlocker: true,
-                    });
-                }
-            }
-            return blockerEvents;
-        };
 
         // Função otimizada para buscar agendamentos e regras da agenda em paralelo
          const fetchData = useCallback(async (start, end, filters) => {
@@ -168,8 +176,8 @@ const AgendaPage = () => {
             setError(err.message || 'Erro ao carregar dados da agenda.');
         } finally {
             setLoading(false);
-        }
-    }, [generateBlockerEvents]); // Adiciona a nova função como dependência
+        } // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []); // A dependência de generateBlockerEvents foi removida
     // Efeito para buscar a lista de funcionários e serviços uma única vez
     useEffect(() => {
         const fetchFilterData = async () => {
