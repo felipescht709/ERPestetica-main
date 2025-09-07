@@ -1,0 +1,53 @@
+version: '3.8'
+
+services:
+  # 1. Serviço do Banco de Dados - usa imagem oficial e o backup via volume
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5433"
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./banco_de_dados/backup_erpestetica3_0.sql:/docker-entrypoint-initdb.d/init.sql # <--- NOVO
+    container_name: erp_db
+    environment:
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin
+      POSTGRES_DB: erpestetica
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin -d erpestetica"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # 2. Serviço do Backend: constrói a imagem e a nomeia como 'erp-backend'
+  backend:
+    build: ./backend
+    image: erp-backend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./backend:/app
+    depends_on:
+      migrations:
+        condition: service_completed_successfully
+
+  # 3. Serviço de Migrations: utiliza a imagem 'erp-backend' que acabamos de construir
+  migrations:
+    image: erp-backend
+    container_name: erp_migrations
+    command: sh -c "npx knex migrate:latest"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  # 4. Serviço do Front-end: constrói sua própria imagem
+  frontend:
+    build: ./frontend
+    ports:
+      - "8080:80"
+    volumes:
+      - ./frontend:/app
+
+volumes:
+  db_data:
