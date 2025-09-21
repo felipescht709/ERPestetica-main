@@ -5,6 +5,8 @@ const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 8080;
 
+require("dotenv").config();
+
 // Importar rotas
 const clientesRoutes = require("./routes/clientes");
 const servicosRoutes = require("./routes/servicos");
