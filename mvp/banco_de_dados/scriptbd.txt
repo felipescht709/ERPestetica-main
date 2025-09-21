@@ -1,0 +1,544 @@
+Tabela: agendamento_servicos
+cod_agendamento: integer
+
+cod_servico: integer
+
+preco_servico: numeric(10,2)
+
+duracao_servico: integer
+
+Tabela: agendamentos
+cod_agendamento: integer
+
+cliente_cod: integer
+
+veiculo_cod: integer
+
+usuario_responsavel_cod: integer
+
+data_hora_inicio: timestamp with time zone
+
+data_hora_fim: timestamp with time zone
+
+preco_total: numeric(10,2)
+
+status: character varying(50)
+
+tipo_agendamento: character varying(50)
+
+forma_pagamento: character varying(50)
+
+observacoes_agendamento: text
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+cod_usuario_empresa: integer
+
+duracao_minutos: integer
+
+Tabela: agendamentos_recorrencia
+cod_recorrencia: integer
+
+cod_agendamento_pai: integer
+
+cod_usuario_empresa: integer
+
+frequencia: character varying(20)
+
+intervalo: integer
+
+data_inicio: date
+
+data_fim: date
+
+dias_semana: jsonb
+
+created_at: timestamp with time zone
+
+updated_at: timestamp with time zone
+
+Tabela: avaliacoes
+cod_avaliacao: integer
+
+agendamento_cod: integer
+
+cliente_cod: integer
+
+nota: integer
+
+comentario: text
+
+data_avaliacao: timestamp without time zone
+
+publicado: boolean
+
+resposta_empresa: text
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+cod_usuario_empresa: integer
+
+Tabela: clientes
+cod_cliente: integer
+
+cpf: character varying(14)
+
+nome_cliente: character varying(150)
+
+data_nascimento: date
+
+email: character varying(100)
+
+telefone: character varying(20)
+
+senha_hash: character varying(255)
+
+genero: character varying(15)
+
+observacoes_gerais: text
+
+indicado_por: integer
+
+codigo_ibge: character varying(10)
+
+cep: character varying(9)
+
+logradouro: character varying(150)
+
+numero: character varying(10)
+
+complemento: character varying(100)
+
+bairro: character varying(100)
+
+cidade: character varying(100)
+
+uf: character varying(2)
+
+ativo: boolean
+
+ultimo_servico: date
+
+total_gasto: numeric(10,2)
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+cod_usuario_empresa: integer
+
+Tabela: configuracoes_agenda
+cod_configuracao: integer
+
+cod_usuario_empresa: integer
+
+tipo_regra: character varying(50)
+
+dia_semana: integer
+
+data_especifica: date
+
+hora_inicio: time without time zone
+
+hora_fim: time without time zone
+
+intervalo_minutos: integer
+
+descricao: text
+
+ativo: boolean
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+valor_numerico: integer
+
+capacidade_simultanea: integer
+
+Tabela: confirmacoes_agendamento
+cod_confirmacao: integer
+
+cod_agendamento: integer
+
+cod_usuario_empresa: integer
+
+token: character varying(255)
+
+canal: character varying(20)
+
+data_geracao: timestamp with time zone
+
+data_expiracao: timestamp with time zone
+
+confirmado_em: timestamp with time zone
+
+ip_confirmacao: character varying(45)
+
+Tabela: despesas
+cod_despesa: integer
+
+descricao: character varying(255)
+
+valor: numeric(10,2)
+
+data_vencimento: date
+
+data_pagamento: date
+
+status_pagamento: character varying(50)
+
+tipo_despesa: character varying(100)
+
+observacoes: text
+
+cod_usuario_empresa: integer
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+Tabela: equipamentos
+cod_equipamento: integer
+
+nome_equipamento: character varying(150)
+
+descricao: text
+
+numero_serie: character varying(100)
+
+data_aquisicao: date
+
+valor_aquisicao: numeric(10,2)
+
+vida_util_anos: integer
+
+status_operacional: character varying(50)
+
+proxima_manutencao: date
+
+localizacao_atual: character varying(100)
+
+responsavel_cod: integer
+
+ativo: boolean
+
+cod_usuario_empresa: integer
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+Tabela: itens_ordem_servico
+cod_item_os: integer
+
+cod_ordem_servico: integer
+
+tipo_item: character varying(20)
+
+cod_servico: integer
+
+cod_produto: integer
+
+quantidade: numeric(10,2)
+
+valor_unitario: numeric(10,2)
+
+valor_total: numeric(10,2)
+
+observacoes_item: text
+
+cod_usuario_empresa: integer
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+Tabela: knex_migrations
+id: integer
+
+name: character varying(255)
+
+batch: integer
+
+migration_time: timestamp with time zone
+
+Tabela: knex_migrations_lock
+index: integer
+
+is_locked: integer
+
+Tabela: ordens_servico
+cod_ordem_servico: integer
+
+cod_cliente: integer
+
+cod_veiculo: integer
+
+data_abertura: timestamp without time zone
+
+data_conclusao_prevista: date
+
+data_conclusao_real: timestamp without time zone
+
+status_os: character varying(50)
+
+valor_total_servicos: numeric(10,2)
+
+valor_total_produtos: numeric(10,2)
+
+valor_total_os: numeric(10,2)
+
+observacoes: text
+
+cod_funcionario_responsavel: integer
+
+cod_usuario_empresa: integer
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+cod_agendamento: integer
+
+Tabela: os_checklist_itens
+cod_item_checklist: integer
+
+cod_ordem_servico: integer
+
+cod_usuario_empresa: integer
+
+descricao_item: text
+
+concluido: boolean
+
+observacoes: text
+
+created_at: timestamp with time zone
+
+updated_at: timestamp with time zone
+
+Tabela: planos_assinatura
+id_plano: integer
+
+nome_plano: character varying(100)
+
+descricao: text
+
+valor_mensal: numeric(10,2)
+
+periodo_cobranca: character varying(50)
+
+recursos_incluidos: text
+
+limite_usuarios: integer
+
+ativo: boolean
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+cod_usuario_empresa: integer
+
+Tabela: produtos_estoque
+cod_produto: integer
+
+nome_produto: character varying(150)
+
+descricao: text
+
+tipo_produto: character varying(50)
+
+quantidade_estoque: integer
+
+unidade_medida: character varying(50)
+
+preco_custo: numeric(10,2)
+
+preco_venda: numeric(10,2)
+
+categoria: character varying(100)
+
+fornecedor: character varying(150)
+
+localizacao_estoque: character varying(100)
+
+estoque_minimo: integer
+
+data_ultima_entrada: timestamp without time zone
+
+data_ultima_saida: timestamp without time zone
+
+ativo: boolean
+
+cod_usuario_empresa: integer
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+Tabela: servicos
+cod_servico: integer
+
+nome_servico: character varying(100)
+
+descricao_servico: text
+
+duracao_minutos: integer
+
+preco: numeric(10,2)
+
+categoria: character varying(50)
+
+ativo: boolean
+
+custo_material: numeric(10,2)
+
+custo_mao_de_obra: numeric(10,2)
+
+garantia_dias: integer
+
+observacoes_internas: text
+
+imagem_url: character varying(255)
+
+ordem_exibicao: integer
+
+requer_aprovacao: boolean
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+cod_usuario_empresa: integer
+
+cor_hex: character varying(7)
+
+capacidade_simultanea: integer
+
+Tabela: transacoes_financeiras
+cod_transacao: integer
+
+cod_usuario_empresa: integer
+
+tipo_transacao: character varying(50)
+
+valor: numeric(10,2)
+
+data_transacao: timestamp with time zone
+
+descricao: text
+
+categoria: character varying(100)
+
+forma_pagamento: character varying(50)
+
+status_pagamento: character varying(50)
+
+cod_cliente: integer
+
+cod_ordem_servico: integer
+
+cod_agendamento: integer
+
+created_at: timestamp with time zone
+
+updated_at: timestamp with time zone
+
+Tabela: usuarios
+cod_usuario: integer
+
+nome_usuario: character varying(150)
+
+nome_empresa: character varying(150)
+
+cnpj: character varying(18)
+
+email: character varying(100)
+
+senha_hash: character varying(255)
+
+telefone_contato: character varying(20)
+
+logo_url: character varying(255)
+
+codigo_ibge: character varying(10)
+
+cep: character varying(9)
+
+logradouro: character varying(150)
+
+numero: character varying(10)
+
+complemento: character varying(100)
+
+bairro: character varying(100)
+
+cidade: character varying(100)
+
+uf: character varying(2)
+
+ativo: boolean
+
+role: character varying(50)
+
+plano_assinatura_id: integer
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+cod_usuario_empresa: integer
+
+Tabela: veiculos
+cod_veiculo: integer
+
+marca: character varying(50)
+
+modelo: character varying(50)
+
+ano: integer
+
+cor: character varying(30)
+
+placa: character varying(8)
+
+chassi: character varying(17)
+
+renavam: character varying(11)
+
+quilometragem_atual: integer
+
+observacoes: text
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone
+
+cod_usuario_empresa: integer
+
+Tabela: veiculos_clientes
+cod_veiculo_cliente: integer
+
+cod_veiculo: integer
+
+cod_cliente: integer
+
+cod_usuario_empresa: integer
+
+data_inicio_posse: date
+
+data_fim_posse: date
+
+observacoes: text
+
+is_proprietario_atual: boolean
+
+created_at: timestamp without time zone
+
+updated_at: timestamp without time zone

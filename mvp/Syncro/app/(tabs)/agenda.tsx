@@ -1,184 +1,207 @@
-import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, Alert, ActivityIndicator } from 'react-native';
-import { Calendar, CalendarProvider } from 'react-native-big-calendar';
-import moment from 'moment';
-import { debounce } from 'lodash';
-import api from '../../services/api';
-import AppointmentModal from '../../components/AppointmentModal';
-import { FontAwesome } from '@expo/vector-icons';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { View, Text, StyleSheet, ScrollView, ActivityIndicator, TouchableOpacity, Dimensions } from 'react-native';
+import { useAuth } from '../../src/context/AuthContext';
+import { api } from '../../src/utils/api';
+import { MaterialIcons } from '@expo/vector-icons';
+import Modal from "react-native-modal";
+import dayjs from 'dayjs';
+import 'dayjs/locale/pt-br';
 
-interface AppointmentEvent {
-  title: string;
-  start: Date;
-  end: Date;
-  cod_agendamento?: number;
-  backgroundColor?: string;
-}
+dayjs.locale('pt-br');
+
+// Paleta de cores oficial da Syncro Auto
+const COLORS = {
+  primary: '#2C3E50',
+  accent: '#1ABC9C',
+  background: '#ECF0F1',
+  text: '#2C3E50',
+  textSecondary: '#8A8A8A',
+  white: '#FFFFFF',
+  danger: '#E74C3C',
+  success: '#27AE60',
+  warning: '#F39C12',
+};
+
+const { height: SCREEN_HEIGHT } = Dimensions.get('window');
+const HOUR_HEIGHT = 80; // Altura de cada hora na linha do tempo
+
+// --- Componente da Tela de Agenda ---
 
 export default function AgendaScreen() {
-  const [events, setEvents] = useState<AppointmentEvent[]>([]);
-  const [isModalVisible, setIsModalVisible] = useState(false);
-  const [selectedDate, setSelectedDate] = useState(moment().toDate());
-  const [selectedEvent, setSelectedEvent] = useState<AppointmentEvent | null>(null);
-  const [loading, setLoading] = useState(false);
-  const loadedMonths = useRef(new Set<string>());
-  const loadingMonths = useRef(new Set<string>());
+  const [currentDate, setCurrentDate] = useState(dayjs());
+  const [events, setEvents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState(null);
+  const [isModalVisible, setModalVisible] = useState(false);
+  const { user } = useAuth();
 
-  const fetchDataForMonth = useCallback(async (monthDate: Date) => {
-    const monthString = moment(monthDate).format('YYYY-MM');
-    if (loadedMonths.current.has(monthString) || loadingMonths.current.has(monthString)) {
-      console.log(`Mês ${monthString} já carregado ou em carregamento`);
-      return;
-    }
-
-    const monthStart = moment(monthDate).startOf('month').toISOString();
-    const monthEnd = moment(monthDate).endOf('month').toISOString();
-
+  const loadEvents = useCallback(async (date) => {
+    if (!user) return;
+    setLoading(true);
+    setError(null);
     try {
-      setLoading(true);
-      loadingMonths.current.add(monthString);
-      console.log(`Carregando agendamentos para ${monthString}`);
-      const agendamentos = await api(`/agendamentos?start=${monthStart}&end=${monthEnd}`);
-      if (!agendamentos || !Array.isArray(agendamentos)) {
-        console.log('Nenhum agendamento retornado ou resposta inválida');
-        return;
-      }
-
-      const newEvents: AppointmentEvent[] = agendamentos
-        .filter((ag: any) => moment(ag.start).isValid() && (ag.end ? moment(ag.end).isValid() : true))
-        .map((ag: any) => ({
-          title: ag.title || 'Sem título',
-          start: new Date(ag.start),
-          end: new Date(ag.end || moment(ag.start).add(1, 'hour').toISOString()),
-          cod_agendamento: ag.cod_agendamento,
-          backgroundColor: ag.backgroundColor || '#1d4ed8',
-        }));
-
-      setEvents(prevEvents => {
-        // Cria um mapa com todos os eventos, dando preferência aos novos/atualizados
-        const eventsMap = new Map(prevEvents.map(e => [e.cod_agendamento, e]));
-        newEvents.forEach(e => eventsMap.set(e.cod_agendamento, e));
-        
-        // Retorna um novo array a partir dos valores do mapa
-        return Array.from(eventsMap.values());
-      });
-      loadedMonths.current.add(monthString);
-    } catch (error: unknown) {
-      const errorMessage = error instanceof Error ? error.message : String((error as any)?.msg || 'Erro desconhecido');
-      console.error(`Erro ao carregar agendamentos para ${monthString}:`, errorMessage);
-      Alert.alert('Erro', `Não foi possível carregar os agendamentos: ${errorMessage}`);
+      const dateString = date.format('YYYY-MM-DD');
+      // A rota de agendamentos já existe e pode ser usada para buscar por data
+      const response = await api(`/agendamentos?start=${dateString}&end=${dateString}`);
+      setEvents(response);
+    } catch (err) {
+      setError('Não foi possível carregar os agendamentos.');
+      console.error(err);
     } finally {
-      loadingMonths.current.delete(monthString);
       setLoading(false);
     }
-  }, []);
+  }, [user]);
 
-  // Carrega os dados do mês atual na primeira renderização
   useEffect(() => {
-    fetchDataForMonth(selectedDate);
-  }, [fetchDataForMonth]);
+    loadEvents(currentDate);
+  }, [currentDate, loadEvents]);
 
-  const debouncedFetchDataForMonth = useMemo(() => debounce(fetchDataForMonth, 300), [fetchDataForMonth]);
-
-  const handleSaveAppointment = useCallback(async () => {
-    setIsModalVisible(false);
-    setSelectedEvent(null);
-    const monthToReload = moment(selectedDate).format('YYYY-MM');
-    loadedMonths.current.delete(monthToReload);
-    console.log(`Recarregando dados para o mês ${monthToReload}`);
-    await fetchDataForMonth(selectedDate);
-  }, [selectedDate, fetchDataForMonth]);
-
-  const handleEventPress = useCallback((event: AppointmentEvent) => {
-    setSelectedEvent(event);
-    setSelectedDate(event.start);
-    setIsModalVisible(true);
+  const timelineHours = useMemo(() => {
+    return Array.from({ length: 15 }, (_, i) => i + 7); // Das 7:00 às 21:00
   }, []);
+  
+  const handleEventPress = (event) => {
+    setSelectedEvent(event);
+    setModalVisible(true);
+  };
+
+  const changeDate = (amount) => {
+    setCurrentDate(currentDate.add(amount, 'day'));
+  };
 
   return (
-    <View style={styles.container}>
-      {loading ? (
-        <ActivityIndicator style={styles.loading} size="large" color="#1d4ed8" />
-      ) : (
-        <CalendarProvider
-          date={selectedDate}
-          onDateChanged={(newDate) => {
-            setSelectedDate(newDate);
-            debouncedFetchDataForMonth(newDate);
-          }}
-        >
-          <Calendar
-            events={events}
-            height={600}
-            mode="week" // Semana para agendamentos detalhados
-            onPressEvent={handleEventPress}
-            eventCellStyle={(event) => ({
-              backgroundColor: event.backgroundColor,
-              borderRadius: 5,
-              padding: 5,
-              borderLeftWidth: 4,
-              borderLeftColor: '#2563eb',
+    <View style={styles.screen}>
+      {/* Header */}
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Agenda</Text>
+        {/* Adicionar seletor de Dia/Semana futuramente */}
+      </View>
+
+      {/* Navegador de Data */}
+      <View style={styles.dateNavigator}>
+        <TouchableOpacity onPress={() => changeDate(-1)} style={styles.navButton}>
+          <MaterialIcons name="chevron-left" size={28} color={COLORS.primary} />
+        </TouchableOpacity>
+        <Text style={styles.dateText}>{currentDate.format('dddd, D [de] MMMM')}</Text>
+        <TouchableOpacity onPress={() => changeDate(1)} style={styles.navButton}>
+          <MaterialIcons name="chevron-right" size={28} color={COLORS.primary} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Conteúdo da Agenda */}
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {loading ? (
+          <ActivityIndicator size="large" color={COLORS.primary} style={{ marginTop: 50 }} />
+        ) : (
+          <View style={styles.timelineContainer}>
+            {/* Linhas do tempo e horas */}
+            {timelineHours.map(hour => (
+              <View key={hour} style={styles.hourSlot}>
+                <Text style={styles.hourText}>{String(hour).padStart(2, '0')}:00</Text>
+                <View style={styles.hourLine} />
+              </View>
+            ))}
+            
+            {/* Eventos posicionados dinamicamente */}
+            {events.map(event => {
+              const start = dayjs(event.data_hora_inicio);
+              const end = dayjs(event.data_hora_fim);
+              const top = (start.hour() - 7 + start.minute() / 60) * HOUR_HEIGHT;
+              const durationMinutes = end.diff(start, 'minute');
+              const height = (durationMinutes / 60) * HOUR_HEIGHT - 4; // -4 para um pequeno espaçamento
+
+              const statusColor = event.status === 'concluido' ? COLORS.success : (event.status === 'em_andamento' ? COLORS.warning : COLORS.primary);
+
+              return (
+                <TouchableOpacity 
+                  key={event.cod_agendamento} 
+                  style={[styles.eventCard, { top, height, borderLeftColor: statusColor }]}
+                  onPress={() => handleEventPress(event)}
+                >
+                  <Text style={styles.eventTitle} numberOfLines={1}>{event.cliente_nome}</Text>
+                  <Text style={styles.eventText} numberOfLines={1}>{event.servicos_nomes}</Text>
+                  <Text style={styles.eventTime}>{start.format('HH:mm')} - {end.format('HH:mm')}</Text>
+                </TouchableOpacity>
+              );
             })}
-            headerContentStyle={styles.headerContent}
-            dayHeaderStyle={styles.dayHeader}
-          />
-        </CalendarProvider>
-      )}
-      <TouchableOpacity
-        style={styles.fab}
-        onPress={() => {
-          setSelectedEvent(null);
-          setIsModalVisible(true);
-        }}
-      >
-        <FontAwesome name="plus" size={24} color="white" />
+          </View>
+        )}
+      </ScrollView>
+
+      {/* Botão Flutuante de Ação */}
+      <TouchableOpacity style={styles.fab}>
+        <MaterialIcons name="add" size={32} color={COLORS.white} />
       </TouchableOpacity>
-      <AppointmentModal
+      
+      {/* Modal de Ações */}
+      <Modal
         isVisible={isModalVisible}
-        onClose={() => {
-          setIsModalVisible(false);
-          setSelectedEvent(null);
-        }}
-        onSave={handleSaveAppointment}
-        selectedDate={moment(selectedDate).toISOString()}
-        selectedEvent={selectedEvent}
-      />
+        onBackdropPress={() => setModalVisible(false)}
+        style={styles.modal}
+      >
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>{selectedEvent?.cliente_nome}</Text>
+          <Text style={styles.modalSubtitle}>{selectedEvent?.servicos_nomes}</Text>
+          {/* Adicione os botões de ação aqui */}
+        </View>
+      </Modal>
     </View>
   );
 }
 
+// --- Estilos ---
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-  },
-  loading: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  fab: {
+  screen: { flex: 1, backgroundColor: COLORS.background },
+  header: { paddingTop: 50, paddingBottom: 10, paddingHorizontal: 20, alignItems: 'center' },
+  headerTitle: { fontSize: 20, fontWeight: 'bold', color: COLORS.primary },
+  dateNavigator: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderColor: '#ddd' },
+  dateText: { fontSize: 16, fontWeight: 'bold', color: COLORS.text, textTransform: 'capitalize' },
+  navButton: { padding: 8 },
+  timelineContainer: { paddingLeft: 60, paddingTop: 20, paddingRight: 10 },
+  hourSlot: { height: HOUR_HEIGHT, flexDirection: 'row', alignItems: 'flex-start' },
+  hourText: { position: 'absolute', left: -50, top: -8, color: COLORS.textSecondary, fontSize: 12 },
+  hourLine: { flex: 1, height: 1, backgroundColor: '#ddd', marginLeft: 10, marginTop: 0 },
+  eventCard: {
     position: 'absolute',
-    width: 56,
-    height: 56,
-    alignItems: 'center',
-    justifyContent: 'center',
-    right: 20,
-    bottom: 20,
-    backgroundColor: '#1d4ed8',
-    borderRadius: 28,
-    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.3)',
+    left: 70,
+    right: 10,
+    backgroundColor: COLORS.white,
+    padding: 12,
+    borderRadius: 8,
+    borderLeftWidth: 5,
+    elevation: 3,
   },
-  headerContent: {
-    backgroundColor: '#1d4ed8',
-    color: '#fff',
-    padding: 10,
-    borderRadius: 5,
+  eventTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.text },
+  eventText: { fontSize: 12, color: COLORS.textSecondary, marginTop: 4 },
+  eventTime: { fontSize: 12, color: COLORS.textSecondary, marginTop: 4, fontStyle: 'italic' },
+  fab: {
+      position: 'absolute',
+      bottom: 80,
+      right: 20,
+      width: 60,
+      height: 60,
+      borderRadius: 30,
+      backgroundColor: COLORS.accent,
+      justifyContent: 'center',
+      alignItems: 'center',
+      elevation: 8,
   },
-  dayHeader: {
-    backgroundColor: '#e0e7ff',
-    color: '#1d4ed8',
-    padding: 5,
-    borderRadius: 3,
+  modal: {
+    justifyContent: 'flex-end',
+    margin: 0,
   },
+  modalContent: {
+    backgroundColor: 'white',
+    padding: 22,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
+    borderColor: 'rgba(0, 0, 0, 0.1)',
+  },
+  modalTitle: { fontSize: 20, fontWeight: 'bold', marginBottom: 8 },
+  modalSubtitle: { fontSize: 16, color: COLORS.textSecondary, marginBottom: 20 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorText: { color: COLORS.danger, fontSize: 16 },
+  button: { backgroundColor: COLORS.accent, padding: 12, borderRadius: 8, alignItems: 'center' },
+  buttonText: { color: COLORS.white, fontWeight: 'bold' },
 });

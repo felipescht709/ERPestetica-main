@@ -27,4 +27,4 @@ EXPOSE 3000
 # Etapa 6: Definir o comando de inicialização
 # Este é o comando que será executado quando o contêiner iniciar.
 # Ele roda o script 'start' definido no seu package.json.
-CMD ["npm", "start"]
+CMD ["npm", "run", "start:prod"]

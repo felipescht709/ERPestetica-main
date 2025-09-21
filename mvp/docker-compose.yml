@@ -1,53 +1,66 @@
-version: '3.8'
-
 services:
-  # 1. Serviço do Banco de Dados - usa imagem oficial e o backup via volume
+  # 1. Banco de Dados PostgreSQL
   db:
     image: postgres:16-alpine
-    ports:
-      - "5433:5433"
-    volumes:
-      - db_data:/var/lib/postgresql/data
-      - ./banco_de_dados/backup_erpestetica3_0.sql:/docker-entrypoint-initdb.d/init.sql # <--- NOVO
     container_name: erp_db
+    ports:
+      - "5433:5432"  
+    volumes:
+      - db_data:/var/lib/postgresql/data # Persist database data
+      - ./banco_de_dados/backup_erpestetica3_0.sql:/docker-entrypoint-initdb.d/backup.dump # Mount backup file
+      - ./banco_de_dados/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh # Mount restore script
     environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: admin
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
       POSTGRES_DB: erpestetica
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d erpestetica"]
+      test: ["CMD-SHELL", "pg_isready -U postgres -d erpestetica"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - erp-network
 
-  # 2. Serviço do Backend: constrói a imagem e a nomeia como 'erp-backend'
+  # 2. Backend Node.js
   backend:
     build: ./backend
     image: erp-backend
+    container_name: erp_backend
     ports:
-      - "3000:3000"
+      - "3001:3001"
     volumes:
       - ./backend:/app
     depends_on:
       migrations:
         condition: service_completed_successfully
+    networks:
+      - erp-network
 
-  # 3. Serviço de Migrations: utiliza a imagem 'erp-backend' que acabamos de construir
+  # 3. Migrations do Knex
   migrations:
     image: erp-backend
     container_name: erp_migrations
-    command: sh -c "npx knex migrate:latest"
+    command: sh -c "npx knex migrate:latest --env development"
     depends_on:
       db:
         condition: service_healthy
+    networks:
+      - erp-network
 
-  # 4. Serviço do Front-end: constrói sua própria imagem
+  # 4. Frontend Nginx
   frontend:
     build: ./frontend
+    container_name: mvp_frontend
     ports:
       - "8080:80"
     volumes:
       - ./frontend:/app
+    networks:
+      - erp-network
 
 volumes:
   db_data:
+
+networks:
+  erp-network:
+    driver: bridge

@@ -123,48 +123,46 @@ router.post('/register', async (req, res) => {
     }
 });
 
-// @route    POST /api/auth/login
-// @desc     Autenticar usuário e obter token
-// @access   Public
+
 router.post('/login', async (req, res) => {
     const { email, senha } = req.body;
-
     try {
-        // 1. Validar campos
-        if (!email || !senha) {
-            return res.status(400).json({ msg: 'Email e senha são obrigatórios.' });
-        }
-        if (!email.includes('@') || !email.includes('.')) {
-            return res.status(400).json({ msg: 'Por favor, insira um email válido.' });
+        const result = await pool.query('SELECT * FROM usuarios WHERE email_usuario = $1', [email]);
+        if (result.rows.length === 0) {
+            // Unifica a mensagem para não dar pistas se o email existe ou não
+            return res.status(401).json({ msg: 'Credenciais inválidas.' });
         }
 
-        // 2. Verificar se o usuário existe
-        let userResult = await pool.query('SELECT * FROM usuarios WHERE email = $1', [email]);
-        if (userResult.rows.length === 0) {
-            return res.status(400).json({ msg: 'Credenciais inválidas. Email ou senha incorretos.' });
-        }
-
-        const user = userResult.rows[0];
-
-        // 3. Verificar a senha (comparar hash)
+        const user = result.rows[0];
         const isMatch = await bcrypt.compare(senha, user.senha_hash);
         if (!isMatch) {
-            return res.status(400).json({ msg: 'Credenciais inválidas. Email ou senha incorretos.' });
+            return res.status(401).json({ msg: 'Credenciais inválidas.' });
         }
 
-        // 4. Verificar se o usuário está ativo
-        if (!user.ativo) {
-            return res.status(401).json({ msg: 'Sua conta está inativa. Por favor, contate o administrador.' });
-        }
+        const payload = {
+            user: {
+                id: user.cod_usuario,
+                role: user.role,
+                cod_usuario_empresa: user.cod_usuario_empresa
+            }
+        };
 
-        // 5. Gerar o token e retornar a resposta
-        const token = generateToken(user);
-        const { senha_hash: removedHash, ...userForResponse } = user;
-        res.json({ token, user: userForResponse });
-
+        jwt.sign(
+            payload,
+            process.env.JWT_SECRET,
+            { expiresIn: '12h' },
+            (err, token) => {
+                if (err) {
+                    console.error('Erro ao gerar token JWT:', err);
+                    return res.status(500).json({ msg: 'Erro ao gerar token de autenticação.' });
+                }
+                res.json({ token });
+            }
+        );
     } catch (err) {
-        console.error('Erro no login do usuário:', err.message);
-        res.status(500).json({ msg: 'Erro interno do servidor durante o login.' });
+        console.error('Erro no servidor ao tentar fazer login:', err.message);
+        // Garante que a resposta de erro seja sempre um JSON válido
+        res.status(500).json({ msg: 'Erro de Servidor' });
     }
 });
 

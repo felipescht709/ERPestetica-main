@@ -2,20 +2,11 @@
 const { Pool } = require('pg');
 
 const pool = new Pool({
-    user: 'postgres',        
-    host: 'localhost',       
-    database: 'erpestetica', 
-    password: 'postgres', 
-    port: 5432,              
-});
-
-// Testar a conexão
-pool.query('SELECT NOW()', (err, res) => {
-    if (err) {
-        console.error('Erro ao conectar ao banco de dados:', err);
-    } else {
-        console.log('Conexão com o PostgreSQL estabelecida em:', res.rows[0].now);
-    }
+    user: process.env.DB_USER,
+    host: process.env.DB_HOST,
+    database: process.env.DB_DATABASE,
+    password: process.env.DB_PASSWORD,
+    port: process.env.DB_PORT || 5432, 
 });
 
 module.exports = pool;

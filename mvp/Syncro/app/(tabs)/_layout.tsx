@@ -1,45 +1,51 @@
 import React from 'react';
 import { Tabs } from 'expo-router';
-import { FontAwesome } from '@expo/vector-icons';
+import { MaterialIcons } from '@expo/vector-icons';
 
-// Supondo que você tenha um arquivo de cores ou defina aqui
-const TabBarActiveTintColor = '#2563eb'; 
+// Paleta de cores oficial da Syncro Auto
+const COLORS = {
+  primary: '#2C3E50',
+  accent: '#1ABC9C',
+  textSecondary: '#8A8A8A',
+};
 
 export default function TabLayout() {
   return (
     <Tabs
-      screenOptions={{
-        tabBarActiveTintColor: TabBarActiveTintColor,
+      screenOptions={({ route }) => ({
+        tabBarActiveTintColor: COLORS.accent,
+        tabBarInactiveTintColor: COLORS.textSecondary,
         headerShown: false,
-      }}>
-      <Tabs.Screen
-        name="index"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="home" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="agenda"
-        options={{
-          title: 'Agenda',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="calendar" color={color} />,
-        }}
-      />
-      <Tabs.Screen
-        name="cadastros"
-        options={{
-          title: 'Cadastros',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="book" color={color} />,
-        }}
-      />
-       <Tabs.Screen
-        name="financeiro"
-        options={{
-          title: 'Financeiro',
-          tabBarIcon: ({ color }) => <FontAwesome size={28} name="dollar" color={color} />,
-        }}
-      />
+        tabBarStyle: {
+          backgroundColor: '#FFFFFF',
+          borderTopWidth: 0,
+          elevation: 10,
+        },
+        tabBarIcon: ({ color, size }) => {
+          let iconName;
+
+          if (route.name === 'index') {
+            iconName = 'home';
+          } else if (route.name === 'agenda') {
+            iconName = 'calendar-today';
+          } else if (route.name === 'ordem-servico') {
+            iconName = 'description';
+          } else if (route.name === 'cadastros') {
+            iconName = 'group';
+          } else if (route.name === 'ajustes') {
+            iconName = 'settings';
+          }
+
+          // Retorna o ícone com o nome e a cor corretos
+          return <MaterialIcons name={iconName} size={size} color={color} />;
+        },
+      })}
+    >
+      <Tabs.Screen name="index" options={{ title: 'Início' }} />
+      <Tabs.Screen name="agenda" options={{ title: 'Agenda' }} />
+      <Tabs.Screen name="ordem-servico" options={{ title: 'OS' }} />
+      <Tabs.Screen name="cadastros" options={{ title: 'Cadastros' }} />
+      <Tabs.Screen name="ajustes" options={{ title: 'Ajustes' }} />
     </Tabs>
   );
 }
