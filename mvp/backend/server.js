@@ -1,7 +1,6 @@
 // backend/server.js
 require("dotenv" ).config();
 const express = require("express");
-const cors = require("cors");
 const app = express();
 const PORT = process.env.PORT || 8080; 
 
@@ -29,14 +28,7 @@ const allowedOrigins = [
   "http://localhost:8081", // Seu app Expo rodando na web
 ];
 
-const corsOptions = {
-  origin: allowedOrigins, // Agora permite múltiplas origens
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  allowedHeaders: ["Content-Type", "Authorization"],
-};
-app.options('*', cors(corsOptions ))
 
-app.use(cors(corsOptions));
 app.use(express.json()); // Permite que o Express.js entenda JSON no corpo das requisições
 
 // Rotas da API
