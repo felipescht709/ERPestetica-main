@@ -1,8 +1,9 @@
 // backend/server.js
-require("dotenv" ).config();
+require("dotenv").config();
 const express = require("express");
+const cors = require("cors");
 const app = express();
-const PORT = process.env.PORT || 8080; 
+const PORT = process.env.PORT || 8080;
 
 // Importar rotas
 const clientesRoutes = require("./routes/clientes");
@@ -22,12 +23,31 @@ const itensOrdensServicoRoutes = require("./routes/itens_ordem_servico");
 const despesasRoutes = require("./routes/despesas");
 const dashboardRoutes = require("./routes/dashboard");
 
-// Middlewares
+// Middleware
 const allowedOrigins = [
-  process.env.FRONTEND_URL || "http://localhost:5173", // Seu app web antigo
-  "http://localhost:8081", // Seu app Expo rodando na web
+  "http://localhost:8081", // Expo Web
+  "http://localhost:5173", // Outro frontend
+  // Adicione aqui a URL do seu app publicado no futuro
 ];
 
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Permite requisições sem 'origin' (como apps mobile nativos ou Postman)
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.indexOf(origin) === -1) {
+        const msg =
+          "A política de CORS para este site não permite acesso da Origem especificada.";
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
+    methods: "GET,POST,PUT,DELETE,OPTIONS",
+    allowedHeaders: "Content-Type, Authorization",
+    credentials: true,
+  })
+);
 
 app.use(express.json()); // Permite que o Express.js entenda JSON no corpo das requisições
 
@@ -55,5 +75,3 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ msg: "Erro interno do servidor", error: err.message });
 });
-
-
