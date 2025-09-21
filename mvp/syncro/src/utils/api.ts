@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://192.168.0.102:3001/api';
+const API_BASE_URL = 'https://erpestetica-main-72067591277.southamerica-east1.run.app';
 
 const getAuthToken = async () => {
     return AsyncStorage.getItem('autoEsteticaJwt');

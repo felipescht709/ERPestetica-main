@@ -1,9 +1,9 @@
 // backend/server.js
-require("dotenv").config(); // Carrega variáveis de ambiente do .env
+require("dotenv" ).config();
 const express = require("express");
 const cors = require("cors");
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 8080; 
 
 // Importar rotas
 const clientesRoutes = require("./routes/clientes");
@@ -34,6 +34,7 @@ const corsOptions = {
   methods: ["GET", "POST", "PUT", "DELETE"],
   allowedHeaders: ["Content-Type", "Authorization"],
 };
+app.options('*', cors(corsOptions ))
 
 app.use(cors(corsOptions));
 app.use(express.json()); // Permite que o Express.js entenda JSON no corpo das requisições
@@ -63,7 +64,4 @@ app.use((err, req, res, next) => {
   res.status(500).json({ msg: "Erro interno do servidor", error: err.message });
 });
 
-// Iniciar o servidor
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
-});
+
