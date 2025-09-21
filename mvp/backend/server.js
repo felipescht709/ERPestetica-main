@@ -28,6 +28,7 @@ const allowedOrigins = [
   process.env.FRONTEND_URL || "http://localhost:5173", // Seu app web antigo
   "http://localhost:8081", // Seu app Expo rodando na web
 ];
+//teste
 
 const corsOptions = {
   origin: allowedOrigins, // Agora permite múltiplas origens
