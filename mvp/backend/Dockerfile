@@ -1,30 +1,48 @@
-# Etapa 1: Definir a imagem base
-# Usaremos uma imagem oficial do Node.js. A versão '18-alpine' é leve e recomendada.
-FROM node:18-alpine
+# ==============================================================================
+# Estágio 1: "Builder"
+# Este estágio instala TODAS as dependências, incluindo as de desenvolvimento,
+# para que possamos usar ferramentas como o Knex para rodar migrações
+# em um passo separado do nosso deploy (ex: no Cloud Build).
+# ==============================================================================
+FROM node:18-alpine AS builder
 
-# Etapa 2: Definir o diretório de trabalho
-# Todos os comandos a seguir serão executados dentro da pasta /app no contêiner.
 WORKDIR /app
 
-# Etapa 3: Copiar os arquivos de dependência e instalar
-# Copiamos package.json e package-lock.json primeiro. O Docker armazena essa camada em cache.
-# Se você não alterar suas dependências, o Docker reutilizará essa etapa, tornando os builds futuros mais rápidos.
+# Copia os arquivos de definição de dependências
 COPY package*.json ./
-COPY knexfile.js ./  
-COPY migrations ./migrations 
-# Instala as dependências. Usamos 'npm install' para garantir que tanto as dependências de produção
-# quanto as de desenvolvimento (como o 'knex') sejam instaladas, pois o serviço 'migrations' precisará delas.
+
+# Instala todas as dependências (incluindo devDependencies)
 RUN npm install
 
-# Etapa 4: Copiar o código-fonte da aplicação
-# Copia todos os outros arquivos do seu backend para o diretório de trabalho no contêiner.
+# Copia o resto do código-fonte
 COPY . .
 
-# Etapa 5: Expor a porta
-# Informa ao Docker que o contêiner escutará na porta 3000.
-EXPOSE 3000
 
-# Etapa 6: Definir o comando de inicialização
-# Este é o comando que será executado quando o contêiner iniciar.
-# Ele roda o script 'start' definido no seu package.json.
-CMD ["npm", "run", "start:prod"]
+# ==============================================================================
+# Estágio 2: "Production"
+# Este é o estágio final. Criamos uma imagem limpa do Node.js
+# e copiamos APENAS o necessário para rodar a aplicação.
+# Isso resulta em uma imagem muito menor e mais segura.
+# ==============================================================================
+FROM node:18-alpine
+
+WORKDIR /app
+
+# Copia os arquivos de definição de dependências
+COPY package*.json ./
+
+# --- OTIMIZAÇÃO PRINCIPAL ---
+# Instala SOMENTE as dependências de produção.
+RUN npm install --omit=dev --no-fund --no-audit
+
+# Copia o código-fonte da aplicação a partir do estágio 'builder'
+COPY . .
+
+# Expõe a porta que a aplicação vai usar.
+# Lembre-se que o Cloud Run ignora isso e usa a variável de ambiente $PORT.
+# Nosso server.js já está preparado para ler essa variável.
+EXPOSE 3001
+
+# Comando final para rodar a aplicação em modo de produção.
+# Usar `node server.js` é mais direto do que `npm start`.
+CMD [ "node", "server.js" ]
