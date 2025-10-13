@@ -1,27 +1,51 @@
 const path = require('path');
 
-// As variáveis de ambiente serão injetadas pelo Cloud Build (para migrações)
-// e pelo serviço do Cloud Run (para a aplicação em execução).
-const DB_HOST = process.env.DB_HOST; // Não defina um fallback aqui. É melhor falhar se não for definido.
-const DB_USER = process.env.DB_USER;
-const DB_PASSWORD = process.env.DB_PASSWORD;
-const DB_NAME = process.env.DB_DATABASE; // Ajustado para corresponder ao secret
-const DB_PORT = process.env.DB_PORT || 5432;
+// Carrega as variáveis de ambiente do arquivo .env para o ambiente de desenvolvimento
+// Em produção (Cloud Build/Run), as variáveis serão injetadas diretamente.
+require('dotenv').config();
+
+// ==============================================================================
+// Objeto de Conexão Dinâmico para Produção
+// ==============================================================================
+
+// Inicia a configuração base da conexão.
+const prodConnection = {
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_DATABASE, // Corresponde ao nome do secret
+};
+
+// Verifica qual método de conexão usar baseado nas variáveis de ambiente
+// que definimos no cloudbuild.yaml
+if (process.env.DB_SOCKET_PATH) {
+  // Cenário 1: Aplicação rodando no Cloud Run (Conexão via Unix Socket)
+  // O gcloud monta o socket no caminho especificado em DB_SOCKET_PATH.
+  prodConnection.host = `${process.env.DB_SOCKET_PATH}/${process.env.DB_CONNECTION_NAME}`;
+} else {
+  // Cenário 2: Migração rodando no Cloud Build (Conexão via TCP com o Proxy)
+  // O cloudbuild.yaml define DB_HOST como '127.0.0.1'.
+  prodConnection.host = process.env.DB_HOST;
+  prodConnection.port = process.env.DB_PORT || 5432;
+}
+
+
+// ==============================================================================
+// Exportação das Configurações do Knex
+// ==============================================================================
 
 module.exports = {
   // Configuração para uso local
   development: {
     client: 'pg',
     connection: {
-      host: 'localhost',
-      user: 'postgres',
-      password: 'postgres',
-      database: 'erpestetica',
-      port: 5432,
+      host: process.env.DEV_DB_HOST || 'localhost',
+      user: process.env.DEV_DB_USER || 'postgres',
+      password: process.env.DEV_DB_PASSWORD || 'postgres',
+      database: process.env.DEV_DB_DATABASE || 'erpestetica',
+      port: parseInt(process.env.DEV_DB_PORT, 10) || 5432,
     },
     migrations: {
       tableName: 'knex_migrations',
-      // Usar path.join torna o caminho relativo ao arquivo, mais robusto.
       directory: path.join(__dirname, 'banco', 'migrations')
     }
   },
@@ -29,19 +53,9 @@ module.exports = {
   // Configuração para o ambiente de produção (Cloud Build e Cloud Run)
   production: {
     client: 'pg',
-    connection: {
-      host: DB_HOST,       // No Cloud Build será '127.0.0.1'. No Cloud Run será '/cloudsql/...'
-      user: DB_USER,
-      password: DB_PASSWORD,
-      database: DB_NAME,
-      port: DB_PORT,
-      // REMOVIDO: A conexão via Cloud SQL Proxy ou socket já é segura e criptografada.
-      // Adicionar uma camada de SSL aqui pode causar erros de conexão.
-      // ssl: { rejectUnauthorized: false }
-    },
+    connection: prodConnection, // <-- A MÁGICA ACONTECE AQUI
     migrations: {
       tableName: 'knex_migrations',
-      // Garante que o Knex sempre encontrará a pasta, não importa de onde o comando seja executado.
       directory: path.join(__dirname, 'banco', 'migrations')
     },
     pool: {
