@@ -1,16 +1,39 @@
-// mvp-estetica/backend/server.js
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const pool = require('./banco'); 
+
+// REMOVIDO: A dependência do antigo pool de conexões.
+// const pool = require('./banco'); 
+
+// ADICIONADO: Importa a instância centralizada do Knex.
+// (Certifique-se de ter criado o arquivo 'db.js' como na sugestão anterior)
+const db = require('./db'); 
 
 const app = express();
-const PORT = process.env.PORT || 3001; // Usa a porta do Cloud Run ou 3001 como fallback para dev local
-app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+const PORT = process.env.PORT || 3001;
+
+// Middlewares (sem alteração)
+const corsOptions = {
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173', 
+    methods: ['GET', 'POST', 'PUT', 'DELETE'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
+};
+app.use(cors(corsOptions));
+app.use(express.json());
+
+// Rota para Health Check - ATUALIZADA para usar Knex
+app.get('/health', async (req, res) => {
+    try {
+        // Usa o método raw do Knex para executar uma consulta simples.
+        await db.raw('SELECT 1');
+        res.status(200).send('OK');
+    } catch (e) {
+        console.error('Falha no Health Check:', e);
+        res.status(503).send('Database connection failed');
+    }
 });
 
-// Importar rotas
+// Importar rotas (sem alteração)
 const clientesRoutes = require('./routes/clientes');
 const servicosRoutes = require('./routes/servicos');
 const agendamentosRoutes = require('./routes/agendamentos');
@@ -28,27 +51,7 @@ const itensOrdensServicoRoutes = require('./routes/itens_ordem_servico');
 const despesasRoutes = require('./routes/despesas');
 const dashboardRoutes = require('./routes/dashboard');
 
-// Middlewares
-const corsOptions = {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173', 
-    methods: ['GET', 'POST', 'PUT', 'DELETE'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
-};
-app.use(cors(corsOptions));
-app.use(express.json());
-
-// Rota para Health Check - Essencial para Cloud Run
-app.get('/health', async (req, res) => {
-    try {
-        // Verifica a conexão com o banco de dados
-        await pool.query('SELECT 1');
-        res.status(200).send('OK');
-    } catch (e) {
-        res.status(503).send('Database connection failed');
-    }
-});
-
-// Rotas da API
+// Rotas da API (sem alteração)
 app.use('/api/auth', authRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/servicos', servicosRoutes);
@@ -66,9 +69,13 @@ app.use('/api/itens_ordem_servico', itensOrdensServicoRoutes);
 app.use('/api/despesas', despesasRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 
-// Middleware de tratamento de erros global
+// Middleware de tratamento de erros global (sem alteração)
 app.use((err, req, res, next) => {
     console.error(err.stack);
     res.status(500).json({ msg: 'Erro interno do servidor', error: err.message });
 });
 
+// Inicialização do servidor (sem alteração)
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
