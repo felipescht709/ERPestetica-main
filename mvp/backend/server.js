@@ -47,7 +47,7 @@ app.get('/health', async (req, res) => {
         res.status(503).send('Database connection failed');
     }
 });
-//vamooo
+
 // Rotas da API
 app.use('/api/auth', authRoutes);
 app.use('/api/clientes', clientesRoutes);
