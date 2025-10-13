@@ -1,18 +1,19 @@
+# A linha 'version' foi removida por ser obsoleta
 services:
   # 1. Banco de Dados PostgreSQL
   db:
     image: postgres:16-alpine
     container_name: erp_db
     ports:
-      - "5433:5432"  
+      - "5433:5432"
     volumes:
-      - db_data:/var/lib/postgresql/data # Persist database data
-      - ./banco_de_dados/backup_erpestetica3_0.sql:/docker-entrypoint-initdb.d/backup.dump # Mount backup file
-      - ./banco_de_dados/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh # Mount restore script
+      - db_data:/var/lib/postgresql/data
+      - ./banco_de_dados/backup_erpestetica3_0.sql:/docker-entrypoint-initdb.d/backup.dump
+      - ./banco_de_dados/init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: erpestetica
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=erpestetica
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d erpestetica"]
       interval: 10s
@@ -21,29 +22,38 @@ services:
     networks:
       - erp-network
 
-  # 2. Backend Node.js
+  # 2. Migrations do Knex
+  # Este serviço usa o mesmo Dockerfile, mas mira o estágio 'builder'
+  migrations:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      target: builder # <<< AQUI ESTÁ A MÁGICA! Usa o estágio 'builder'.
+    container_name: erp_migrations
+    command: sh -c "npx knex migrate:latest --knexfile /app/knexfile.js"
+    env_file: ./.env
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - erp-network
+
+  # 3. Backend Node.js
+  # Este serviço usa o estágio final (padrão) do Dockerfile para produção
   backend:
-    build: ./backend
-    image: erp-backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+      # A ausência de 'target' faz com que ele use o último estágio por padrão.
     container_name: erp_backend
     ports:
       - "3001:3001"
     volumes:
       - ./backend:/app
+    env_file: ./.env
     depends_on:
       migrations:
         condition: service_completed_successfully
-    networks:
-      - erp-network
-
-  # 3. Migrations do Knex
-  migrations:
-    image: erp-backend
-    container_name: erp_migrations
-    command: sh -c "npx knex migrate:latest --env development"
-    depends_on:
-      db:
-        condition: service_healthy
     networks:
       - erp-network
 

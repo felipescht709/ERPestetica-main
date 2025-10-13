@@ -2,10 +2,13 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const pool = require('./banco'); // Importa a pool de conexão para o health check
+const pool = require('./banco'); 
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3001; // Usa a porta do Cloud Run ou 3001 como fallback para dev local
+app.listen(PORT, () => {
+  console.log(`Servidor rodando na porta ${PORT}`);
+});
 
 // Importar rotas
 const clientesRoutes = require('./routes/clientes');
@@ -69,7 +72,3 @@ app.use((err, req, res, next) => {
     res.status(500).json({ msg: 'Erro interno do servidor', error: err.message });
 });
 
-// Iniciar o servidor
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Servidor rodando na porta ${PORT}`);
-});

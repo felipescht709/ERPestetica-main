@@ -1,48 +1,46 @@
 # ==============================================================================
 # Estágio 1: "Builder"
-# Este estágio instala TODAS as dependências, incluindo as de desenvolvimento,
-# para que possamos usar ferramentas como o Knex para rodar migrações
-# em um passo separado do nosso deploy (ex: no Cloud Build).
+# Responsável por instalar TODAS as dependências (incluindo dev)
+# e compilar/transpilar o código se necessário (ex: TypeScript).
 # ==============================================================================
 FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copia os arquivos de definição de dependências
+# Copia os arquivos de dependência e instala TUDO
 COPY package*.json ./
-
-# Instala todas as dependências (incluindo devDependencies)
 RUN npm install
 
 # Copia o resto do código-fonte
 COPY . .
 
+# (Opcional) Se você usa TypeScript, adicione o passo de build aqui
+# RUN npm run build
+
 
 # ==============================================================================
 # Estágio 2: "Production"
-# Este é o estágio final. Criamos uma imagem limpa do Node.js
-# e copiamos APENAS o necessário para rodar a aplicação.
-# Isso resulta em uma imagem muito menor e mais segura.
+# Cria a imagem final, leve e segura para produção.
 # ==============================================================================
 FROM node:18-alpine
 
 WORKDIR /app
 
-# Copia os arquivos de definição de dependências
+# Copia os arquivos de dependência
 COPY package*.json ./
 
-# --- OTIMIZAÇÃO PRINCIPAL ---
-# Instala SOMENTE as dependências de produção.
+# Instala SOMENTE as dependências de produção
 RUN npm install --omit=dev --no-fund --no-audit
 
-# Copia o código-fonte da aplicação a partir do estágio 'builder'
-COPY . .
+# Copia o código-fonte e os node_modules do estágio 'builder'.
+# Isso evita ter que rodar 'npm install' duas vezes para as mesmas dependências.
+COPY --from=builder /app/node_modules ./node_modules
+COPY --from=builder /app .
 
-# Expõe a porta que a aplicação vai usar.
-# Lembre-se que o Cloud Run ignora isso e usa a variável de ambiente $PORT.
-# Nosso server.js já está preparado para ler essa variável.
+# (Opcional) Se você usou um passo de build no estágio anterior, copie a pasta de build
+# COPY --from=builder /app/dist ./dist
+
 EXPOSE 3001
 
-# Comando final para rodar a aplicação em modo de produção.
-# Usar `node server.js` é mais direto do que `npm start`.
+# O comando para iniciar a aplicação
 CMD [ "node", "server.js" ]

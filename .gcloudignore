@@ -1,0 +1,13 @@
+# Ignorar a pasta de dependências do Node.js em todos os níveis
+**/node_modules
+
+# Arquivos de configuração do Git
+.git
+.gitignore
+
+# Arquivos de ambiente locais que nunca devem ir para o repositório
+.env
+
+# Logs e arquivos temporários do NPM
+npm-debug.log
+
