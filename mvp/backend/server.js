@@ -1,13 +1,20 @@
+// ======================= Bloco de Depuração =======================
+console.log("--- [LOG 1] Iniciando execução do server.js ---");
+// =================================================================
+
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 
-// REMOVIDO: A dependência do antigo pool de conexões.
-// const pool = require('./banco'); 
+// ======================= Bloco de Depuração =======================
+console.log("--- [LOG 2] Tentando carregar a conexão do banco de dados de ./db.js ---");
+// =================================================================
 
-// ADICIONADO: Importa a instância centralizada do Knex.
-// (Certifique-se de ter criado o arquivo 'db.js' como na sugestão anterior)
 const db = require('./db'); 
+
+// ======================= Bloco de Depuração =======================
+console.log("--- [LOG 3] Módulo de conexão do banco de dados carregado com sucesso. ---");
+// =================================================================
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -77,5 +84,7 @@ app.use((err, req, res, next) => {
 
 // Inicialização do servidor (sem alteração)
 app.listen(PORT, () => {
-  console.log(`Servidor rodando na porta ${PORT}`);
+    // ======================= Bloco de Depuração =======================
+    console.log(`--- [LOG 4] Servidor rodando e escutando na porta ${PORT} ---`);
+    // =================================================================
 });
