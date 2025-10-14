@@ -1,7 +1,7 @@
 // Código atualizado para felipescht709/erpestetica/ERPestetica-06b7c746df12133269d64d3c5d88435c14e938cd/mvp-estetica/backend/routes/veiculos.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../banco');
+const pool = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 
 // GET all vehicles (multi-tenant)

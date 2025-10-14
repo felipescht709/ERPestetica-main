@@ -1,7 +1,7 @@
 // financeiro.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../banco'); 
+const pool = require('../db'); 
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const moment = require('moment'); // Certifique-se de ter 'moment' instalado (npm install moment)
 

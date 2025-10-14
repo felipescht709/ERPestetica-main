@@ -1,7 +1,7 @@
 // routes/servicos.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../banco');
+const pool = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth'); // Importa os middlewares
 
 // GET all services

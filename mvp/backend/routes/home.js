@@ -1,6 +1,6 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../banco');
+const pool = require('../db');
 const { authenticateToken } = require('../middleware/auth');
 
 // @route    GET /api/home

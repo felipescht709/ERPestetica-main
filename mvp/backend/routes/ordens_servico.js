@@ -1,7 +1,7 @@
 // backend/routes/ordens_servico.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../banco'); // Importa o pool de conexão com o banco
+const pool = require('../db'); // Importa o pool de conexão com o banco
 const { authenticateToken, authorizeRole } = require('../middleware/auth'); // Importa os middlewares
 
 // GET all Ordens de Serviço (com filtros e detalhes básicos)

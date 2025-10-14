@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const pool = require('../banco'); // Seu pool de conexão com o banco de dados
+const pool = require('../db'); // Seu pool de conexão com o banco de dados
 const { authenticateToken } = require('../middleware/auth'); // Importa o middleware de autenticação
 
 // Helper function to generate JWT token

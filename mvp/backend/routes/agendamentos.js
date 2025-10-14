@@ -1,7 +1,7 @@
 // backend/routes/agendamentos.js (VERSÃO CORRIGIDA E INTEGRADA)
 const express = require('express');
 const router = express.Router();
-const pool = require('../banco');
+const pool = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const moment = require('moment-timezone');
 const crypto = require('crypto');

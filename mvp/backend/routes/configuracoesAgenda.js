@@ -1,7 +1,7 @@
 // backend/routes/configuracoesAgenda.js (conteúdo completo, já te passei antes)
 const express = require('express');
 const router = express.Router();
-const pool = require('../banco');
+const pool = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 
 // Middleware para verificar se o usuário é 'admin' ou 'gestor'

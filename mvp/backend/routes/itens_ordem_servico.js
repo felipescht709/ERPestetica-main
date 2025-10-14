@@ -1,7 +1,7 @@
 // backend/routes/itens_ordem_servico.js
 const express = require('express');
 const router = express.Router();
-const pool = require('../banco');
+const pool = require('../db');
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 
 // Helper para recalcular os totais da OS
