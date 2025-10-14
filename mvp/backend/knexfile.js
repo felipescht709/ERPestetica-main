@@ -1,48 +1,35 @@
 const path = require('path');
-
-// Carrega as variáveis de ambiente do arquivo .env para o ambiente de desenvolvimento
-// Em produção (Cloud Build/Run), as variáveis serão injetadas diretamente.
 require('dotenv').config();
 
-// ==============================================================================
-// Objeto de Conexão Dinâmico para Produção
-// ==============================================================================
-
-// Inicia a configuração base da conexão.
+// Objeto de conexão para produção, que será preenchido dinamicamente.
 const prodConnection = {
   user: process.env.DB_USER,
   password: process.env.DB_PASSWORD,
-  database: process.env.DB_DATABASE, // Corresponde ao nome do secret
+  database: process.env.DB_DATABASE,
 };
 
-// Verifica qual método de conexão usar baseado nas variáveis de ambiente
-// que definimos no cloudbuild.yaml
+// Lógica de Conexão Dinâmica para o ambiente de produção
 if (process.env.DB_SOCKET_PATH) {
-  // Cenário 1: Aplicação rodando no Cloud Run (Conexão via Unix Socket)
-  // O gcloud monta o socket no caminho especificado em DB_SOCKET_PATH.
+  // Cenário 1: Estamos no Cloud Run (conexão via Unix Socket)
+  // O host é o caminho para a pasta do socket. A porta NÃO deve ser definida.
   prodConnection.host = `${process.env.DB_SOCKET_PATH}/${process.env.DB_CONNECTION_NAME}`;
 } else {
-  // Cenário 2: Migração rodando no Cloud Build (Conexão via TCP com o Proxy)
-  // O cloudbuild.yaml define DB_HOST como '127.0.0.1'.
-  prodConnection.host = process.env.DB_HOST;
+  // Cenário 2: Estamos no Cloud Build ou localmente (conexão via TCP/IP)
+  // O host é um endereço de IP ou hostname, e a porta é necessária.
+  prodConnection.host = process.env.DB_HOST; // Ex: '127.0.0.1'
   prodConnection.port = process.env.DB_PORT || 5432;
 }
 
 
-// ==============================================================================
-// Exportação das Configurações do Knex
-// ==============================================================================
-
 module.exports = {
-  // Configuração para uso local
   development: {
     client: 'pg',
     connection: {
-      host: process.env.DEV_DB_HOST || 'localhost',
+      host: process.env.DEV_DB_HOST || '127.0.0.1',
       user: process.env.DEV_DB_USER || 'postgres',
       password: process.env.DEV_DB_PASSWORD || 'postgres',
       database: process.env.DEV_DB_DATABASE || 'erpestetica',
-      port: parseInt(process.env.DEV_DB_PORT, 10) || 5432,
+      port: process.env.DEV_DB_PORT || 5432,
     },
     migrations: {
       tableName: 'knex_migrations',
@@ -50,10 +37,10 @@ module.exports = {
     }
   },
 
-  // Configuração para o ambiente de produção (Cloud Build e Cloud Run)
   production: {
     client: 'pg',
-    connection: prodConnection, // <-- A MÁGICA ACONTECE AQUI
+    // Usa o objeto de conexão que foi montado dinamicamente acima
+    connection: prodConnection,
     migrations: {
       tableName: 'knex_migrations',
       directory: path.join(__dirname, 'banco', 'migrations')
@@ -64,3 +51,4 @@ module.exports = {
     }
   }
 };
+
