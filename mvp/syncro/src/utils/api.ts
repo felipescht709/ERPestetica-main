@@ -1,16 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'https://erpestetica-main-72067591277.southamerica-east1.run.app';
+// --- CORREÇÃO PRINCIPAL AQUI ---
+// Adicionei o prefixo '/api' à URL base.
+const API_BASE_URL = 'https://erpestetica-main-72067591277.southamerica-east1.run.app/api';
 
-const getAuthToken = async () => {
-    return AsyncStorage.getItem('autoEsteticaJwt');
-};
-
-const api = async (url: string, options: RequestInit = {}) => {
+const api = async (endpoint: string, options: RequestInit = {}) => {
     // --- LOG A: ANTES DE QUALQUER CHAMADA ---
-    console.log(`[API] Preparando requisição para: ${API_BASE_URL}${url}`);
+    console.log(`[API] Preparando requisição para: ${API_BASE_URL}${endpoint}`);
     
-    const token = await getAuthToken();
+    const token = await AsyncStorage.getItem('autoEsteticaJwt');
 
     // --- LOG B: VERIFICAR O TOKEN ENCONTRADO ---
     console.log(`[API] Token lido do AsyncStorage: ${token ? `...${token.slice(-10)}` : 'NENHUM TOKEN ENCONTRADO'}`);
@@ -21,41 +19,47 @@ const api = async (url: string, options: RequestInit = {}) => {
     };
 
     if (token) {
-        (headers as Record<string, string>)['Authorization'] = `Bearer ${token}`;
+        headers['Authorization'] = `Bearer ${token}`;
     }
 
     // --- LOG C: VERIFICAR OS CABEÇALHOS FINAIS ---
-    console.log('[API] Cabeçalhos enviados:', headers);
+    console.log(`[API] Cabeçalhos enviados para ${endpoint}:`, headers);
 
     try {
-        const response = await fetch(`${API_BASE_URL}${url}`, {
+        const response = await fetch(`${API_BASE_URL}${endpoint}`, {
             ...options,
             headers,
         });
 
-        if (response.status === 401 || response.status === 403) {
-            // Em React Native, a camada de UI (AuthContext) deve lidar com o logout.
-            // A API apenas remove o token e lança o erro.
-            await AsyncStorage.removeItem('autoEsteticaJwt');
-            throw new Error('Sessão expirada ou acesso negado.');
+        // Tratamento de Respostas de Sucesso
+        if (response.ok) {
+            if (response.status === 204) { // Lida com sucesso sem conteúdo (ex: DELETE)
+                return null;
+            }
+            return response.json(); // Para todas as outras respostas de sucesso
         }
 
-        if (!response.ok) {
-            const errorData = await response.json();
-            throw errorData; 
+        // Tratamento de Respostas de Erro
+        // Se o token for inválido, o AuthContext irá tratar o logout.
+        if (response.status === 401 || response.status === 403) {
+            await AsyncStorage.removeItem('autoEsteticaJwt');
         }
         
-        const contentType = response.headers.get("content-type");
-        if (contentType && contentType.indexOf("application/json") !== -1) {
-            return await response.json();
-        }
-        return {};
+        // Tenta obter uma mensagem de erro do corpo da resposta, com um fallback.
+        const errorBody = await response.json().catch(() => ({
+            msg: `Erro ${response.status}: O servidor não retornou uma mensagem de erro detalhada.`
+        }));
+
+        // Lança um erro padronizado para ser capturado pelo AuthContext.
+        throw new Error(errorBody.msg || 'Ocorreu um erro na requisição.');
 
     } catch (error) {
         // --- LOG D: ERRO NA CHAMADA FETCH ---
-        console.error(`[API] Erro final na chamada para ${url}:`, error);
+        console.error(`[API] Erro final na chamada para ${endpoint}:`, error);
+        // Re-lança o erro para que o AuthContext possa lidar com ele.
         throw error;
     }
 };
 
 export default api;
+

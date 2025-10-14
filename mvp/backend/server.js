@@ -20,8 +20,22 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 
 // Middlewares (sem alteração)
+// CÓDIGO CORRIGIDO - PERMITE VÁRIAS ORIGENS
+const allowedOrigins = [
+    'http://localhost:5173', // A sua aplicação web anterior
+    'http://localhost:8081', // O seu Expo Go (Web)
+    // Pode adicionar aqui a URL do seu front-end de produção no futuro
+];
+
 const corsOptions = {
-    origin: process.env.FRONTEND_URL || 'http://localhost:5173', 
+    origin: function (origin, callback) {
+        // Permite requisições sem 'origin' (ex: Postman) ou se a origem estiver na lista
+        if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+            callback(null, true);
+        } else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
 };
