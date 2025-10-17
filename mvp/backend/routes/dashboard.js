@@ -1,45 +1,38 @@
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
+const db = require('../db'); // Alterado para db (instância do Knex)
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 
 // @route    GET /api/dashboard/kpis
 // @desc     Busca os principais KPIs para o dashboard da empresa
 // @access   Private (Admin, Gerente)
 router.get('/kpis', authenticateToken, authorizeRole(['admin', 'gerente']), async (req, res) => {
-    // Pegamos o código da empresa do usuário que está logado
     const { cod_usuario_empresa } = req.user;
-    const client = await pool.connect();
 
     try {
-        // Para otimizar, vamos executar várias consultas ao mesmo tempo (em paralelo)
-        const faturamentoMesQuery = client.query(
-            `SELECT SUM(preco_total) as total FROM agendamentos
-             WHERE cod_usuario_empresa = $1 AND status = 'concluido'
-             AND date_trunc('month', data_hora_inicio) = date_trunc('month', current_date)`,
-            [cod_usuario_empresa]
-        );
+        const faturamentoMesQuery = db('agendamentos')
+            .where({ cod_usuario_empresa, status: 'concluido' })
+            .andWhereRaw("date_trunc('month', data_hora_inicio) = date_trunc('month', current_date)")
+            .sum('preco_total as total')
+            .first();
 
-        const agendamentosHojeQuery = client.query(
-            `SELECT COUNT(cod_agendamento) as total FROM agendamentos
-             WHERE cod_usuario_empresa = $1
-             AND data_hora_inicio::date = current_date`,
-            [cod_usuario_empresa]
-        );
+        const agendamentosHojeQuery = db('agendamentos')
+            .where({ cod_usuario_empresa })
+            .andWhereRaw("data_hora_inicio::date = current_date")
+            .count('cod_agendamento as total')
+            .first();
         
-        const servicoMaisAgendadoQuery = client.query(
-            `SELECT s.nome_servico, COUNT(a.cod_agendamento) as total
-             FROM agendamentos a
-             JOIN servicos s ON a.servico_cod = s.cod_servico
-             WHERE a.cod_usuario_empresa = $1
-             AND date_trunc('month', a.data_hora_inicio) = date_trunc('month', current_date)
-             GROUP BY s.nome_servico
-             ORDER BY total DESC
-             LIMIT 1`,
-            [cod_usuario_empresa]
-        );
+        const servicoMaisAgendadoQuery = db('agendamentos as a')
+            .join('agendamento_servicos as asv', 'a.cod_agendamento', 'asv.cod_agendamento')
+            .join('servicos as s', 'asv.cod_servico', 's.cod_servico')
+            .where('a.cod_usuario_empresa', cod_usuario_empresa)
+            .andWhereRaw("date_trunc('month', a.data_hora_inicio) = date_trunc('month', current_date)")
+            .select('s.nome_servico')
+            .groupBy('s.nome_servico')
+            .orderByRaw('COUNT(a.cod_agendamento) DESC')
+            .limit(1)
+            .first();
 
-        // Aguarda todas as consultas terminarem
         const [
             faturamentoMesResult,
             agendamentosHojeResult,
@@ -50,11 +43,10 @@ router.get('/kpis', authenticateToken, authorizeRole(['admin', 'gerente']), asyn
             servicoMaisAgendadoQuery
         ]);
 
-        // Monta o objeto de resposta
         const kpis = {
-            faturamento_total_mes: parseFloat(faturamentoMesResult.rows[0]?.total || 0),
-            agendamentos_hoje: parseInt(agendamentosHojeResult.rows[0]?.total || 0),
-            servico_principal_mes: servicoMaisAgendadoResult.rows[0]?.nome_servico || 'N/A'
+            faturamento_total_mes: parseFloat(faturamentoMesResult?.total || 0),
+            agendamentos_hoje: parseInt(agendamentosHojeResult?.total || 0),
+            servico_principal_mes: servicoMaisAgendadoResult?.nome_servico || 'N/A'
         };
 
         res.json(kpis);
@@ -62,8 +54,6 @@ router.get('/kpis', authenticateToken, authorizeRole(['admin', 'gerente']), asyn
     } catch (err) {
         console.error('Erro ao buscar KPIs do dashboard:', err.message);
         res.status(500).send('Server Error');
-    } finally {
-        client.release();
     }
 });
 

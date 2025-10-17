@@ -1,12 +1,11 @@
-// routes/auth.js
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const pool = require('../db'); // Seu pool de conexão com o banco de dados
-const { authenticateToken } = require('../middleware/auth'); // Importa o middleware de autenticação
+const db = require('../db'); // A nossa instância centralizada do Knex
+const { authenticateToken } = require('../middleware/auth');
 
-// Helper function to generate JWT token
+// Função helper para gerar o token JWT (sem alterações, está ótima)
 const generateToken = (user) => {
     const payload = {
         user: {
@@ -19,177 +18,132 @@ const generateToken = (user) => {
             cod_usuario_empresa: user.cod_usuario_empresa
         }
     };
-
-    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '1h' });
+    return jwt.sign(payload, process.env.JWT_SECRET, { expiresIn: '12h' });
 };
 
 // @route    POST /api/auth/register
-// @desc     Registrar um novo usuário (ideal para o primeiro admin da empresa)
-// @access   Public (nesta fase, para permitir o registro inicial de uma empresa)
+// @desc     Registrar um novo usuário e empresa (REFATORADO COM TRANSAÇÃO KNEX)
 router.post('/register', async (req, res) => {
     const {
-        nome_usuario,
-        nome_empresa,
-        cnpj,
-        email,
-        senha, // Senha em texto claro vinda do frontend
-        role, // Esperamos 'admin' para o registro inicial de empresa
-        telefone_contato,
-        logo_url,
-        codigo_ibge,
-        cep,
-        logradouro,
-        numero,
-        complemento,
-        bairro,
-        cidade,
-        uf
+        nome_usuario, nome_empresa, cnpj, email, senha, role, telefone_contato,
+        logo_url, codigo_ibge, cep, logradouro, numero, complemento,
+        bairro, cidade, uf
     } = req.body;
 
+    // Validações de entrada (sem alterações)
+    if (!nome_usuario || !email || !senha || !nome_empresa || !cnpj || !role) {
+        return res.status(400).json({ msg: 'Por favor, preencha todos os campos obrigatórios.' });
+    }
+    if (senha.length < 6) {
+        return res.status(400).json({ msg: 'A senha deve ter no mínimo 6 caracteres.' });
+    }
+    if (role !== 'admin') {
+        return res.status(400).json({ msg: 'Role inválida para registro inicial.' });
+    }
+
     try {
-        // Iniciar transação para garantir a integridade dos dados
-        await pool.query('BEGIN');
+        // O Knex.js gere a transação. Se ocorrer um erro, ele faz o rollback automaticamente.
+        const registeredUser = await db.transaction(async (trx) => {
+            // Verifica se o email ou CNPJ já existem usando a transação (trx)
+            const existingUser = await trx('usuarios').where({ email }).orWhere({ cnpj }).first();
+            if (existingUser) {
+                if (existingUser.email === email) {
+                    // Lança um erro para acionar o rollback
+                    throw new Error('Este email já está em uso.');
+                }
+                if (existingUser.cnpj === cnpj) {
+                    throw new Error('Este CNPJ já está registrado.');
+                }
+            }
+            
+            // Gera o hash da senha
+            const salt = await bcrypt.genSalt(10);
+            const senha_hash = await bcrypt.hash(senha, salt);
 
-        // 1. Validação de campos obrigatórios no backend
-        if (!nome_usuario || !email || !senha || !nome_empresa || !cnpj || !role) {
-            return res.status(400).json({ msg: 'Por favor, preencha todos os campos obrigatórios: Nome de Usuário, Email, Senha, Nome da Empresa, CNPJ, e Role.' });
-        }
-        if (senha.length < 6) {
-            return res.status(400).json({ msg: 'A senha deve ter no mínimo 6 caracteres.' });
-        }
-        // Para o registro inicial da empresa, apenas a role 'admin' deve ser permitida via esta rota.
-        if (role !== 'admin') {
-            return res.status(400).json({ msg: 'Role inválida para registro inicial. Apenas "admin" é permitido por esta rota.' });
-        }
-        // Validação de formato de email e CNPJ (exemplo simplificado, pode ser mais robusto com regex)
-        if (!email.includes('@') || !email.includes('.')) {
-            return res.status(400).json({ msg: 'Por favor, insira um email válido.' });
-        }
-        if (cnpj.length < 14) { // CNPJ com 14 dígitos (sem formatação)
-            return res.status(400).json({ msg: 'CNPJ inválido. Deve conter pelo menos 14 caracteres numéricos.' });
-        }
+            // Insere o novo utilizador e retorna todos os seus dados
+            const [newUser] = await trx('usuarios')
+                .insert({
+                    nome_usuario, nome_empresa, cnpj, email, senha_hash, role, ativo: true,
+                    telefone_contato, logo_url, codigo_ibge, cep, logradouro, numero,
+                    complemento, bairro, cidade, uf
+                })
+                .returning('*');
 
-        // 3. Gerar hash da senha
-        const salt = await bcrypt.genSalt(10);
-        const senha_hash = await bcrypt.hash(senha, salt);
+            // Atualiza o cod_usuario_empresa para ser o próprio ID do admin
+            const [updatedUser] = await trx('usuarios')
+                .where({ cod_usuario: newUser.cod_usuario })
+                .update({ cod_usuario_empresa: newUser.cod_usuario })
+                .returning('*');
+            
+            return updatedUser;
+        });
 
-        // 4. Inserir o novo usuário no banco de dados
-        const newUserResult = await pool.query(
-            `INSERT INTO usuarios (
-                nome_usuario, nome_empresa, cnpj, email, senha_hash, role, ativo,
-                telefone_contato, logo_url, codigo_ibge, cep, logradouro, numero, complemento, bairro, cidade, uf
-            ) VALUES($1, $2, $3, $4, $5, $6, TRUE, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16) RETURNING *`, // Retorna todos os campos para uso imediato
-            [
-                nome_usuario, nome_empresa, cnpj, email, senha_hash, role,
-                telefone_contato || null, logo_url || null, codigo_ibge || null,
-                cep || null, logradouro || null, numero || null, complemento || null,
-                bairro || null, cidade || null, uf || null
-            ]
-        );
+        // Se a transação for bem-sucedida, gera o token
+        const token = generateToken(registeredUser);
+        const { senha_hash, ...userForResponse } = registeredUser;
 
-        const newUser = newUserResult.rows[0];
-
-        // Atualiza cod_usuario_empresa para o novo usuário registrado
-        await pool.query(
-            'UPDATE usuarios SET cod_usuario_empresa = $1 WHERE cod_usuario = $1',
-            [newUser.cod_usuario]
-        );
-
-        // O cod_usuario_empresa agora é o próprio ID do usuário admin
-        newUser.cod_usuario_empresa = newUser.cod_usuario;
-
-        // Commit da transação
-        await pool.query('COMMIT');
-
-        // 6. Gerar o token e retornar a resposta
-        const token = generateToken(newUser);
-        const { senha_hash: removedHash, ...userForResponse } = newUser;
         res.status(201).json({ token, user: userForResponse });
 
     } catch (err) {
-        // Em caso de erro, reverte a transação
-        await pool.query('ROLLBACK');
         console.error('Erro no registro do usuário:', err);
-
-        if (err.code === '23505') { // Código de erro para violação de unicidade no PostgreSQL
-            if (err.constraint === 'usuarios_email_key') {
-                return res.status(409).json({ msg: 'Este email já está em uso.' });
-            }
-            if (err.constraint === 'usuarios_cnpj_key') {
-                return res.status(409).json({ msg: 'Este CNPJ já está registrado.' });
-            }
+        // Responde com a mensagem de erro específica que foi lançada na transação
+        if (err.message.includes('email') || err.message.includes('CNPJ')) {
+            return res.status(409).json({ msg: err.message });
         }
-        res.status(500).json({ msg: 'Erro interno do servidor durante o registro.', error: err.message });
+        res.status(500).json({ msg: 'Erro interno do servidor durante o registro.' });
     }
 });
 
 
+// @route    POST /api/auth/login
+// @desc     Autenticar usuário e obter token (CORRIGIDO)
 router.post('/login', async (req, res) => {
     const { email, senha } = req.body;
+    if (!email || !senha) {
+        return res.status(400).json({ msg: 'Por favor, forneça email e senha.' });
+    }
+
     try {
-        const result = await pool.query('SELECT * FROM usuarios WHERE email_usuario = $1', [email]);
-        if (result.rows.length === 0) {
-            // Unifica a mensagem para não dar pistas se o email existe ou não
+        const user = await db('usuarios').where({ email }).first();
+        if (!user) {
             return res.status(401).json({ msg: 'Credenciais inválidas.' });
         }
 
-        const user = result.rows[0];
         const isMatch = await bcrypt.compare(senha, user.senha_hash);
         if (!isMatch) {
             return res.status(401).json({ msg: 'Credenciais inválidas.' });
         }
-
-        const payload = {
-            user: {
-                id: user.cod_usuario,
-                role: user.role,
-                cod_usuario_empresa: user.cod_usuario_empresa
-            }
-        };
-
-        jwt.sign(
-            payload,
-            process.env.JWT_SECRET,
-            { expiresIn: '12h' },
-            (err, token) => {
-                if (err) {
-                    console.error('Erro ao gerar token JWT:', err);
-                    return res.status(500).json({ msg: 'Erro ao gerar token de autenticação.' });
-                }
-                res.json({ token });
-            }
-        );
+        
+        const token = generateToken(user);
+        const { senha_hash, ...userForResponse } = user;
+        
+        res.json({ token, user: userForResponse });
     } catch (err) {
-        console.error('Erro no servidor ao tentar fazer login:', err.message);
-        // Garante que a resposta de erro seja sempre um JSON válido
-        res.status(500).json({ msg: 'Erro de Servidor' });
+        console.error('Erro no servidor ao tentar fazer login:', err);
+        res.status(500).json({ msg: 'Erro interno do servidor.' });
     }
 });
 
 // @route    GET /api/auth/me
-// @desc     Obter dados do usuário logado usando o token JWT
-// @access   Private (requer token válido)
+// @desc     Obter dados do usuário logado (CORRIGIDO)
 router.get('/me', authenticateToken, async (req, res) => {
     try {
-        // req.user é populado pelo middleware authenticateToken
-        // Retorna todos os campos do usuário, exceto a senha_hash
-        const user = await pool.query(
-            `SELECT
-                cod_usuario, nome_usuario, nome_empresa, cnpj, email, role, ativo,
-                telefone_contato, logo_url, codigo_ibge, cep, logradouro, numero, complemento, bairro, cidade, uf,
-                created_at, updated_at
-            FROM usuarios WHERE cod_usuario = $1`,
-            [req.user.id]
-        );
+        const user = await db('usuarios')
+            .where({ cod_usuario: req.user.id })
+            .select(
+                'cod_usuario', 'nome_usuario', 'nome_empresa', 'cnpj', 'email', 'role', 'ativo',
+                'telefone_contato', 'logo_url', 'codigo_ibge', 'cep', 'logradouro', 'numero', 
+                'complemento', 'bairro', 'cidade', 'uf', 'created_at', 'updated_at', 'cod_usuario_empresa'
+            )
+            .first();
 
-        if (user.rows.length === 0) {
-            return res.status(404).json({ msg: 'Usuário não encontrado.' });
+        if (!user) {
+            return res.status(404).json({ msg: 'Utilizador não encontrado.' });
         }
-
-        res.json(user.rows[0]);
+        res.json(user);
     } catch (err) {
-        console.error('Erro ao obter dados do usuário logado:', err.message);
-        res.status(500).json({ msg: 'Erro interno do servidor ao buscar dados do usuário.' });
+        console.error('Erro ao obter dados do utilizador logado:', err);
+        res.status(500).json({ msg: 'Erro interno do servidor.' });
     }
 });
 

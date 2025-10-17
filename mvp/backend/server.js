@@ -1,30 +1,16 @@
-// ======================= Bloco de Depuração =======================
-console.log("--- [LOG 1] Iniciando execução do server.js ---");
-// =================================================================
+
 
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-
-// ======================= Bloco de Depuração =======================
-console.log("--- [LOG 2] Tentando carregar a conexão do banco de dados de ./db.js ---");
-// =================================================================
-
 const db = require('./db'); 
-
-// ======================= Bloco de Depuração =======================
-console.log("--- [LOG 3] Módulo de conexão do banco de dados carregado com sucesso. ---");
-// =================================================================
-
 const app = express();
 const PORT = process.env.PORT || 3001;
 
-// Middlewares (sem alteração)
-// CÓDIGO CORRIGIDO - PERMITE VÁRIAS ORIGENS
+// Middlewares 
 const allowedOrigins = [
-    'http://localhost:5173', // A sua aplicação web anterior
-    'http://localhost:8081', // O seu Expo Go (Web)
-    // Pode adicionar aqui a URL do seu front-end de produção no futuro
+    'http://localhost:5173', 
+    'http://localhost:8081', 
 ];
 
 const corsOptions = {

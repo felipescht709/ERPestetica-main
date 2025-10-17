@@ -1,15 +1,15 @@
 // backend/routes/agendamentos.js (VERSÃO CORRIGIDA E INTEGRADA)
 const express = require('express');
 const router = express.Router();
-const pool = require('../db');
+const db = require('../db'); // Alterado de pool para db
 const { authenticateToken, authorizeRole } = require('../middleware/auth');
 const moment = require('moment-timezone');
 const crypto = require('crypto');
 const { sendConfirmationEmail, sendConfirmationWhatsApp } = require('../services/messagingService');
 
-// FUNÇÃO HELPER PARA VERIFICAR CONFLITOS DE AGENDAMENTO (Mantida como está)
+// FUNÇÃO HELPER PARA VERIFICAR CONFLITOS DE AGENDAMENTO (Refatorada para Knex)
 const checkAppointmentConflicts = async (
-    client,
+    trx, // Transação Knex
     cod_usuario_empresa,
     data_hora_inicio,
     data_hora_fim,
@@ -17,110 +17,105 @@ const checkAppointmentConflicts = async (
     veiculo_cod = null,
     current_cod_agendamento = null
 ) => {
-    let query = `
-        SELECT cod_agendamento
-        FROM agendamentos
-        WHERE cod_usuario_empresa = $1
-          AND status IN ('agendado', 'em_andamento', 'confirmado_cliente')
-          AND (data_hora_inicio, data_hora_fim) OVERLAPS ($2::timestamptz, $3::timestamptz)
-    `;
-    const params = [cod_usuario_empresa, data_hora_inicio, data_hora_fim];
-    let paramIndex = 4;
+    const query = trx('agendamentos')
+        .where('cod_usuario_empresa', cod_usuario_empresa)
+        .whereIn('status', ['agendado', 'em_andamento', 'confirmado_cliente'])
+        .where(function() {
+            this.where('data_hora_inicio', '<', data_hora_fim)
+                .andWhere('data_hora_fim', '>', data_hora_inicio);
+        });
 
-    let conflictConditions = [];
-    if (usuario_responsavel_cod) {
-        conflictConditions.push(`usuario_responsavel_cod = $${paramIndex++}`);
-        params.push(usuario_responsavel_cod);
-    }
-    if (veiculo_cod) {
-        conflictConditions.push(`veiculo_cod = $${paramIndex++}`);
-        params.push(veiculo_cod);
-    }
-    if (conflictConditions.length > 0) {
-        query += ` AND (${conflictConditions.join(' OR ')})`;
+    if (usuario_responsavel_cod || veiculo_cod) {
+        query.andWhere(function() {
+            if (usuario_responsavel_cod) {
+                this.orWhere('usuario_responsavel_cod', usuario_responsavel_cod);
+            }
+            if (veiculo_cod) {
+                this.orWhere('veiculo_cod', veiculo_cod);
+            }
+        });
     } else {
-        // Se não houver responsável ou veículo, não há conflito a verificar por esses critérios
         return { hasConflict: false, conflictingIds: [] };
     }
+
     if (current_cod_agendamento) {
-        query += ` AND cod_agendamento != $${paramIndex++}`;
-        params.push(current_cod_agendamento);
+        query.andWhere('cod_agendamento', '!=', current_cod_agendamento);
     }
 
-    const result = await client.query(query, params);
-    return { hasConflict: result.rows.length > 0, conflictingIds: result.rows.map(row => row.cod_agendamento) };
+    const result = await query.select('cod_agendamento');
+    return { hasConflict: result.length > 0, conflictingIds: result.map(row => row.cod_agendamento) };
 };
 
-// ROTA GET / (Listar Agendamentos) - CORRIGIDA PARA MÚLTIPLOS SERVIÇOS
+// ROTA GET / (Listar Agendamentos) - Refatorada para Knex
 router.get('/', authenticateToken, authorizeRole(['admin', 'gerente', 'atendente', 'tecnico']), async (req, res) => {
     try {
         const { cod_usuario_empresa } = req.user;
         const { start, end, status, responsaveis, servicos } = req.query;
 
-        // ALTERADO: A query agora busca os serviços de forma agregada
-        let query = `
-            SELECT
-                a.*, -- Pega todas as colunas de 'agendamentos'
-                a.data_hora_inicio AS "start", 
-                a.data_hora_fim AS "end",
-                c.nome_cliente AS "title",
-                
-                -- NOVO: Agrega todos os serviços vinculados em um array de objetos JSON
-                (SELECT json_agg(json_build_object('cod_servico', s.cod_servico, 'nome_servico', s.nome_servico))
-                 FROM agendamento_servicos asv
-                 JOIN servicos s ON s.cod_servico = asv.cod_servico
-                 WHERE asv.cod_agendamento = a.cod_agendamento) as servicos_agendados,
+        const query = db('agendamentos as a')
+            .join('clientes as c', 'a.cliente_cod', 'c.cod_cliente')
+            .leftJoin('veiculos as v', 'a.veiculo_cod', 'v.cod_veiculo')
+            .leftJoin('usuarios as u', 'a.usuario_responsavel_cod', 'u.cod_usuario')
+            .where('a.cod_usuario_empresa', cod_usuario_empresa);
 
+        query.select([
+            'a.*',
+            db.raw('a.data_hora_inicio AS "start"'),
+            db.raw('a.data_hora_fim AS "end"'),
+            db.raw('c.nome_cliente AS "title"'),
+            db.raw(`(
+                SELECT json_agg(json_build_object('cod_servico', s.cod_servico, 'nome_servico', s.nome_servico))
+                FROM agendamento_servicos asv
+                JOIN servicos s ON s.cod_servico = asv.cod_servico
+                WHERE asv.cod_agendamento = a.cod_agendamento
+            ) as servicos_agendados`),
+            db.raw(`
                 CASE 
-                    WHEN a.status = 'confirmado_cliente' THEN '#8a2be2' WHEN a.status = 'concluido' THEN '#28a745'
-                    WHEN a.status = 'em_andamento' THEN '#ffc107' WHEN a.status = 'cancelado' THEN '#6c757d'
-                    WHEN a.status = 'pendente' THEN '#6f42c1' ELSE '#007bff'
-                END AS "backgroundColor",
+                    WHEN a.status = 'confirmado_cliente' THEN '#8a2be2'
+                    WHEN a.status = 'concluido' THEN '#28a745'
+                    WHEN a.status = 'em_andamento' THEN '#ffc107'
+                    WHEN a.status = 'cancelado' THEN '#6c757d'
+                    WHEN a.status = 'pendente' THEN '#6f42c1'
+                    ELSE '#007bff'
+                END AS "backgroundColor"
+            `),
+            db.raw(`
                 CASE 
-                    WHEN a.status = 'confirmado_cliente' THEN '#8a2be2' WHEN a.status = 'concluido' THEN '#28a745'
-                    WHEN a.status = 'em_andamento' THEN '#ffc107' WHEN a.status = 'cancelado' THEN '#6c757d'
-                    WHEN a.status = 'pendente' THEN '#6f42c1' ELSE '#007bff'
-                END AS "borderColor",
-                v.placa AS veiculo_placa, v.modelo AS veiculo_modelo,
-                u.nome_usuario AS usuario_responsavel_nome
-            FROM agendamentos a
-            JOIN clientes c ON a.cliente_cod = c.cod_cliente
-            LEFT JOIN veiculos v ON a.veiculo_cod = v.cod_veiculo
-            LEFT JOIN usuarios u ON a.usuario_responsavel_cod = u.cod_usuario
-            WHERE a.cod_usuario_empresa = $1
-        `;
-        const params = [cod_usuario_empresa];
-        let paramIndex = 2;
+                    WHEN a.status = 'confirmado_cliente' THEN '#8a2be2'
+                    WHEN a.status = 'concluido' THEN '#28a745'
+                    WHEN a.status = 'em_andamento' THEN '#ffc107'
+                    WHEN a.status = 'cancelado' THEN '#6c757d'
+                    WHEN a.status = 'pendente' THEN '#6f42c1'
+                    ELSE '#007bff'
+                END AS "borderColor"
+            `),
+            'v.placa as veiculo_placa',
+            'v.modelo as veiculo_modelo',
+            'u.nome_usuario as usuario_responsavel_nome'
+        ]);
 
         if (start && end) {
-            query += ` AND a.data_hora_fim >= $${paramIndex++}::timestamptz AND a.data_hora_inicio <= $${paramIndex++}::timestamptz`;
-            params.push(start, end);
+            query.where('a.data_hora_fim', '>=', start).andWhere('a.data_hora_inicio', '<=', end);
         }
         if (status) {
-            query += ` AND a.status = ANY($${paramIndex++}::text[])`;
-            params.push(status.split(','));
+            query.whereIn('a.status', status.split(','));
         }
         if (responsaveis) {
-            query += ` AND a.usuario_responsavel_cod = ANY($${paramIndex++}::int[])`;
-            params.push(responsaveis.split(',').map(Number));
+            query.whereIn('a.usuario_responsavel_cod', responsaveis.split(',').map(Number));
         }
-        
-        // ALTERADO: O filtro de serviços agora usa uma subquery com EXISTS
         if (servicos) {
-            query += ` AND EXISTS (
-                SELECT 1 FROM agendamento_servicos asv
-                WHERE asv.cod_agendamento = a.cod_agendamento
-                AND asv.cod_servico = ANY($${paramIndex++}::int[])
-            )`;
-            params.push(servicos.split(',').map(Number));
+            query.whereExists(function() {
+                this.select(1)
+                    .from('agendamento_servicos as asv')
+                    .whereRaw('asv.cod_agendamento = a.cod_agendamento')
+                    .whereIn('asv.cod_servico', servicos.split(',').map(Number));
+            });
         }
 
-        query += ` ORDER BY a.data_hora_inicio ASC`;
-        const result = await pool.query(query, params);
-        res.json(result.rows);
+        const result = await query.orderBy('a.data_hora_inicio', 'asc');
+        res.json(result);
     } catch (err) {
         console.error('Erro ao buscar agendamentos:', err.message, err.stack);
-        // CORRIGIDO: Padronização do erro para JSON
         res.status(500).json({ msg: 'Erro ao buscar agendamentos.', error: err.message });
     }
 });
